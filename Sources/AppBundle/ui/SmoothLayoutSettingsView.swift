@@ -48,6 +48,27 @@ struct OpenSmoothLayoutSettingsButton: View {
     }
 }
 
+@MainActor
+private var commandLineSettingsWindowController: NSWindowController?
+
+@MainActor
+public func scheduleCommandLineSettingsWindowIfRequested() {
+    guard serverArgs.openSettings else { return }
+    DispatchQueue.main.async {
+        let content = NSHostingController(rootView: SmoothLayoutSettingsView())
+        let window = NSWindow(contentViewController: content)
+        window.title = "AeroSpaceSmooth Settings"
+        window.setContentSize(NSSize(width: 1180, height: 820))
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        window.center()
+        window.isReleasedWhenClosed = false
+        let controller = NSWindowController(window: window)
+        commandLineSettingsWindowController = controller
+        NSApp.activate(ignoringOtherApps: true)
+        controller.showWindow(nil)
+    }
+}
+
 private enum SmoothSettingsSection: String, CaseIterable, Identifiable {
     case layouts
     case general

@@ -7,6 +7,7 @@ import Foundation
         initTerminationHandler()
         unsafe _isCli = false
         initServerArgs()
+        scheduleCommandLineSettingsWindowIfRequested()
         await waitForAccessibilityPermission_nonCancellable()
         if isDebug {
             await toggleReleaseServerIfDebug(.off)
@@ -61,6 +62,7 @@ var isStartup: Bool { refreshSessionEvent?.isStartup == true }
 struct ServerArgs: Sendable {
     var configLocation: String? = nil
     var isReadOnly: Bool = false
+    var openSettings: Bool = false
 }
 
 private let serverHelp = """
@@ -73,6 +75,7 @@ private let serverHelp = """
                               and ${XDG_CONFIG_HOME}/aerospace/aerospace.toml
       --read-only             Disable window management.
                               Useful if you want to use only debug-windows or other query commands.
+      --open-settings         Open the AeroSpaceSmooth Settings window after launch.
     """
 
 nonisolated(unsafe) private var _serverArgs = ServerArgs()
@@ -97,6 +100,8 @@ private func initServerArgs() {
                 index += 1
             case "--read-only": // todo rename to '--disabled' and unite with disabled feature
                 unsafe _serverArgs.isReadOnly = true
+            case "--open-settings":
+                unsafe _serverArgs.openSettings = true
             case "-NSDocumentRevisionsDebugMode" where isDebug:
                 // Skip Xcode CLI args.
                 // Usually it's '-NSDocumentRevisionsDebugMode NO'/'-NSDocumentRevisionsDebugMode YES'
