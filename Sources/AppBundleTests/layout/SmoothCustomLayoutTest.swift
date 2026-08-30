@@ -123,6 +123,40 @@ final class SmoothCustomLayoutTest: XCTestCase {
         assertEquals(profile.style(for: 2), .columns)
     }
 
+    func testStoreRepairsBlueprintSavedWithInactivePresetOnce() throws {
+        let suiteName = "SmoothCustomLayoutTest.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let custom = SmoothCustomLayoutBlueprint.hybridDwindle(
+            windowCount: 4,
+            startsAt: 3,
+            primaryAxis: .horizontal,
+        )
+        let profile = SmoothMonitorLayoutProfile(
+            monitorName: "LG Ultra HD",
+            enabled: true,
+            tileLimit: 8,
+            styles: Array(repeating: .dwindle, count: SmoothMonitorLayoutProfile.configuredWindowCount),
+            customLayouts: ["4": custom],
+        )
+        defaults.set(
+            try JSONEncoder().encode(["LG Ultra HD": profile]),
+            forKey: "AeroSpaceSmooth.monitor-layout-profiles.v1",
+        )
+
+        let repaired = SmoothLayoutSettingsStore(defaults: defaults)
+        assertEquals(repaired.profile(named: "LG Ultra HD", isHorizontal: true).style(for: 4), .manual)
+
+        var explicitlyChangedProfile = repaired.profile(named: "LG Ultra HD", isHorizontal: true)
+        explicitlyChangedProfile.styles[3] = .grid
+        defaults.set(
+            try JSONEncoder().encode(["LG Ultra HD": explicitlyChangedProfile]),
+            forKey: "AeroSpaceSmooth.monitor-layout-profiles.v1",
+        )
+        let reopened = SmoothLayoutSettingsStore(defaults: defaults)
+        assertEquals(reopened.profile(named: "LG Ultra HD", isHorizontal: true).style(for: 4), .grid)
+    }
+
     func testRuntimeAppliesHybridCustomTreeAndDoesNotRebuildItRepeatedly() {
         let custom = SmoothCustomLayoutBlueprint.hybridDwindle(
             windowCount: 4,

@@ -794,7 +794,9 @@ private struct MonitorLayoutsSettingsPane: View {
                     Toggle(
                         "Automatic layout on this monitor",
                         isOn: Binding(
-                            get: { profile.enabled },
+                            get: {
+                                settings.profile(named: monitor.name, isHorizontal: monitor.isHorizontal).enabled
+                            },
                             set: {
                                 settings.setEnabled(
                                     $0,
@@ -821,7 +823,9 @@ private struct MonitorLayoutsSettingsPane: View {
                     Stepper(
                         "\(profile.tileLimit)",
                         value: Binding(
-                            get: { profile.tileLimit },
+                            get: {
+                                settings.profile(named: monitor.name, isHorizontal: monitor.isHorizontal).tileLimit
+                            },
                             set: {
                                 settings.setTileLimit(
                                     $0,
@@ -881,7 +885,15 @@ private struct MonitorLayoutsSettingsPane: View {
                 Picker(
                     "Style",
                     selection: Binding(
-                        get: { style },
+                        // Read the live store value. Capturing `style` here lets
+                        // Picker write its old selection back while the sheet is
+                        // opening, leaving a saved blueprint inactive.
+                        get: {
+                            settings.profile(
+                                named: monitor.name,
+                                isHorizontal: monitor.isHorizontal,
+                            ).style(for: count)
+                        },
                         set: {
                             settings.setStyle(
                                 $0,

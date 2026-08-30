@@ -43,6 +43,11 @@ func invalidateSmoothWorkspaceLayoutSnapshots() {
 }
 
 @MainActor
+func invalidateSmoothWorkspaceLayoutSnapshot(workspaceName: String) {
+    smoothWorkspaceLayoutSnapshots.removeValue(forKey: workspaceName)
+}
+
+@MainActor
 func reconcileSmoothWorkspaceLayouts() {
     guard !isReconcilingSmoothWorkspaceLayouts else { return }
     isReconcilingSmoothWorkspaceLayouts = true

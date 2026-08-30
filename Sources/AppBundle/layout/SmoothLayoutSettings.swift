@@ -142,6 +142,7 @@ final class SmoothLayoutSettingsStore: ObservableObject {
     static let shared = SmoothLayoutSettingsStore()
 
     private static let defaultsKey = "AeroSpaceSmooth.monitor-layout-profiles.v1"
+    private static let customSelectionRepairKey = "AeroSpaceSmooth.custom-layout-selection-repair.v1"
     private let defaults: UserDefaults
 
     @Published private(set) var profiles: [String: SmoothMonitorLayoutProfile]
@@ -152,6 +153,7 @@ final class SmoothLayoutSettingsStore: ObservableObject {
             .flatMap { try? JSONDecoder().decode([String: SmoothMonitorLayoutProfile].self, from: $0) }
             ?? [:]
         profiles = profiles.mapValues(\.normalized)
+        repairCustomLayoutSelectionsIfNeeded()
     }
 
     func profile(for monitor: MonitorInfo) -> SmoothMonitorLayoutProfile {
@@ -234,6 +236,26 @@ final class SmoothLayoutSettingsStore: ObservableObject {
     private func persist() {
         guard let data = try? JSONEncoder().encode(profiles) else { return }
         defaults.set(data, forKey: Self.defaultsKey)
+    }
+
+    /// Early versions of the visual editor could persist the blueprint while a
+    /// stale SwiftUI Picker binding immediately restored the previous preset.
+    /// Repair those profiles once, while still allowing the user to switch away
+    /// from Custom later without deleting the saved design.
+    private func repairCustomLayoutSelectionsIfNeeded() {
+        guard !defaults.bool(forKey: Self.customSelectionRepairKey) else { return }
+        for monitorName in profiles.keys {
+            var profile = profiles[monitorName].orDie().normalized
+            for key in profile.customLayouts.keys {
+                guard let windowCount = Int(key),
+                      (1 ... SmoothMonitorLayoutProfile.configuredWindowCount).contains(windowCount)
+                else { continue }
+                profile.styles[windowCount - 1] = .manual
+            }
+            profiles[monitorName] = profile
+        }
+        persist()
+        defaults.set(true, forKey: Self.customSelectionRepairKey)
     }
 
     func replaceProfilesForTests(

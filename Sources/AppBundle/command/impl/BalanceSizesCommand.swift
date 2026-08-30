@@ -9,6 +9,12 @@ struct BalanceSizesCommand: Command {
     func run(_ env: CmdEnv, _ io: CmdIo) -> BinaryExitCode {
         guard let target = args.resolveTargetOrReportError(env, io) else { return .fail }
         balance(target.workspace.rootTilingContainer)
+        // In AeroSpaceSmooth this command is also the explicit "reorganize"
+        // action. Rebuild the focused workspace from its selected monitor/count
+        // profile instead of merely equalizing the current (possibly stale)
+        // tree. Other workspaces retain their snapshots and are left untouched.
+        invalidateSmoothWorkspaceLayoutSnapshot(workspaceName: target.workspace.name)
+        reconcileSmoothWorkspaceLayouts()
         return .succ
     }
 }
