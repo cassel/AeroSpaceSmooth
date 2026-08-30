@@ -66,6 +66,12 @@ The current branch was built incrementally rather than as one isolated UI patch:
 Start AeroSpaceSmooth and click its menu-bar icon, then choose **Settings…**.
 The window title is **AeroSpaceSmooth Settings**.
 
+Development builds can also open Settings immediately at launch:
+
+```sh
+open -a AeroSpaceSmooth --args --open-settings
+```
+
 The app needs macOS Accessibility permission before it can manage windows. Avoid
 running official AeroSpace and AeroSpaceSmooth at the same time: two window managers
 reacting to the same Accessibility events can cause repeated moves or apparent loops.
@@ -82,6 +88,21 @@ The Settings sidebar contains seven pages:
 
 Each settings card includes an information button. Clicking the small `i` explains
 what that group controls and the consequences of changing it.
+
+### Settings gallery
+
+The Layouts page adapts its visual previews to the selected monitor:
+
+![Per-monitor layouts in AeroSpaceSmooth Settings](./docs/assets/aerospace-smooth-layouts.jpeg)
+
+Custom layouts are edited directly on an accurately proportioned display preview:
+
+![Visual Custom Layout editor](./docs/assets/aerospace-smooth-custom-layout.jpeg)
+
+Standard AeroSpace behavior and AeroSpaceSmooth animation controls live together on
+the General page:
+
+![General settings](./docs/assets/aerospace-smooth-general.jpeg)
 
 ## Layouts
 

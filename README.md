@@ -34,6 +34,29 @@ Read the complete [AeroSpaceSmooth feature and Settings guide](./AEROSPACE_SMOOT
 for the design goals, every Settings page, layout behavior, keyboard workflow,
 multi-monitor model, limitations, and build instructions.
 
+## Settings screenshots
+
+### Per-monitor layouts
+
+Choose a connected display and define the layout used for each window count from
+1 through 10. The previews use that monitor's real aspect ratio and resolution.
+
+![AeroSpaceSmooth per-monitor layout settings](./docs/assets/aerospace-smooth-layouts.jpeg)
+
+### Visual Custom Layout editor
+
+Build a layout directly on the monitor preview, drag dividers to resize tiles, or
+use exact split controls, presets, Hybrid Dwindle, ordering, undo, and redo.
+
+![AeroSpaceSmooth visual Custom Layout editor](./docs/assets/aerospace-smooth-custom-layout.jpeg)
+
+### General settings
+
+Configure startup, standard AeroSpace window-tree behavior, and coordinated window
+animations from the same native interface.
+
+![AeroSpaceSmooth General settings](./docs/assets/aerospace-smooth-general.jpeg)
+
 ## Project status
 
 AeroSpaceSmooth is currently a source-built development version. It has been used
