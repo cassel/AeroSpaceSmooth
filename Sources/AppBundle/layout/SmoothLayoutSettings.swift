@@ -2,6 +2,7 @@ import Combine
 import Foundation
 
 enum SmoothLayoutStyle: String, Codable, CaseIterable, Identifiable, Sendable {
+    case manual
     case fullscreen
     case columns
     case rows
@@ -13,6 +14,7 @@ enum SmoothLayoutStyle: String, Codable, CaseIterable, Identifiable, Sendable {
 
     var title: String {
         switch self {
+            case .manual: "Manual"
             case .fullscreen: "Maximizada"
             case .columns: "Colunas"
             case .rows: "Linhas"
@@ -24,6 +26,7 @@ enum SmoothLayoutStyle: String, Codable, CaseIterable, Identifiable, Sendable {
 
     var detail: String {
         switch self {
+            case .manual: "O Smooth preserva a árvore atual para você mover e redimensionar livremente."
             case .fullscreen: "Uma janela ocupa toda a area util."
             case .columns: "Janelas lado a lado com larguras iguais."
             case .rows: "Janelas empilhadas com alturas iguais."
@@ -35,8 +38,8 @@ enum SmoothLayoutStyle: String, Codable, CaseIterable, Identifiable, Sendable {
 
     static func available(for windowCount: Int) -> [SmoothLayoutStyle] {
         windowCount == 1
-            ? [.fullscreen]
-            : [.dwindle, .verticalPairs, .grid, .columns, .rows]
+            ? [.fullscreen, .manual]
+            : [.dwindle, .verticalPairs, .grid, .columns, .rows, .manual]
     }
 }
 
@@ -177,7 +180,9 @@ final class SmoothLayoutSettingsStore: ObservableObject {
 
     private func didChangeLayoutSettings() {
         persist()
-        invalidateSmoothWorkspaceLayoutSnapshots()
+        // Reconciliation compares the selected style with its last snapshot,
+        // so keeping that snapshot lets a transition to Manual distinguish an
+        // auto-fullscreen window from a fullscreen choice made by the user.
         scheduleCancellableCompleteRefreshSession(.menuBarButton)
     }
 
@@ -186,8 +191,13 @@ final class SmoothLayoutSettingsStore: ObservableObject {
         defaults.set(data, forKey: Self.defaultsKey)
     }
 
-    func replaceProfilesForTests(_ profiles: [String: SmoothMonitorLayoutProfile]) {
+    func replaceProfilesForTests(
+        _ profiles: [String: SmoothMonitorLayoutProfile],
+        invalidateSnapshots: Bool = true,
+    ) {
         self.profiles = profiles.mapValues(\.normalized)
-        invalidateSmoothWorkspaceLayoutSnapshots()
+        if invalidateSnapshots {
+            invalidateSmoothWorkspaceLayoutSnapshots()
+        }
     }
 }

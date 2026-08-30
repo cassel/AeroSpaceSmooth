@@ -800,31 +800,42 @@ private struct SmoothLayoutPreview: View {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(.black.opacity(0.72))
 
-                ForEach(Array(frames.enumerated()), id: \.offset) { index, frame in
-                    let rect = CGRect(
-                        x: canvas.minX + frame.minX * canvas.width,
-                        y: canvas.minY + frame.minY * canvas.height,
-                        width: frame.width * canvas.width,
-                        height: frame.height * canvas.height,
-                    ).insetBy(dx: 2, dy: 2)
+                if style == .manual {
+                    VStack(spacing: 6) {
+                        Image(systemName: "hand.draw")
+                            .font(.title2)
+                        Text("Você organiza")
+                            .font(.caption.bold())
+                    }
+                    .foregroundStyle(.white.opacity(0.9))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    ForEach(Array(frames.enumerated()), id: \.offset) { index, frame in
+                        let rect = CGRect(
+                            x: canvas.minX + frame.minX * canvas.width,
+                            y: canvas.minY + frame.minY * canvas.height,
+                            width: frame.width * canvas.width,
+                            height: frame.height * canvas.height,
+                        ).insetBy(dx: 2, dy: 2)
 
-                    RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: index == 0
-                                    ? [Color.cyan, Color.green]
-                                    : [Color.blue.opacity(0.75), Color.purple.opacity(0.8)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing,
-                            ),
-                        )
-                        .overlay {
-                            Text("\(index + 1)")
-                                .font(.caption2.bold())
-                                .foregroundStyle(.white)
-                        }
-                        .frame(width: max(rect.width, 1), height: max(rect.height, 1))
-                        .offset(x: rect.minX, y: rect.minY)
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    colors: index == 0
+                                        ? [Color.cyan, Color.green]
+                                        : [Color.blue.opacity(0.75), Color.purple.opacity(0.8)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing,
+                                ),
+                            )
+                            .overlay {
+                                Text("\(index + 1)")
+                                    .font(.caption2.bold())
+                                    .foregroundStyle(.white)
+                            }
+                            .frame(width: max(rect.width, 1), height: max(rect.height, 1))
+                            .offset(x: rect.minX, y: rect.minY)
+                    }
                 }
             }
         }
@@ -836,11 +847,13 @@ enum SmoothLayoutPreviewGeometry {
     static func frames(style requestedStyle: SmoothLayoutStyle, count: Int, monitorIsHorizontal: Bool) -> [CGRect] {
         guard count > 0 else { return [] }
         let style: SmoothLayoutStyle = count == 1
-            ? .fullscreen
+            ? requestedStyle == .manual ? .manual : .fullscreen
             : requestedStyle == .fullscreen ? .columns : requestedStyle
         let full = CGRect(x: 0, y: 0, width: 1, height: 1)
 
         switch style {
+            case .manual:
+                return []
             case .fullscreen:
                 return [full]
             case .columns:

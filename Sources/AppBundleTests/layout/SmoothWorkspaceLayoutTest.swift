@@ -126,6 +126,46 @@ final class SmoothWorkspaceLayoutTest: XCTestCase {
         assertEquals(destination.rootTilingContainer.allLeafWindowsRecursive.count, 2)
     }
 
+    func testManualStylePreservesCustomTreeOrderAndWeights() {
+        enableStyle(.manual)
+        let root = Workspace.get(byName: name).rootTilingContainer
+        let first = TestWindow.new(id: 1, parent: root, adaptiveWeight: 3)
+        let tail = TilingContainer.newVTiles(parent: root, adaptiveWeight: 1)
+        let second = TestWindow.new(id: 2, parent: tail, adaptiveWeight: 2)
+        let third = TestWindow.new(id: 3, parent: tail, adaptiveWeight: 1)
+
+        reconcileSmoothWorkspaceLayouts()
+        reconcileSmoothWorkspaceLayouts()
+
+        assertEquals(root.layoutDescription, .h_tiles([.window(1), .v_tiles([.window(2), .window(3)])]))
+        assertTrue(first.parent === root)
+        assertTrue(second.parent === tail)
+        assertTrue(third.parent === tail)
+        assertEquals(first.getWeight(.h), 3)
+        assertEquals(tail.getWeight(.h), 1)
+        assertEquals(second.getWeight(.v), 2)
+        assertEquals(third.getWeight(.v), 1)
+    }
+
+    func testManualStyleReleasesAutoFullscreenOnlyOnTransition() {
+        enableStyle(.fullscreen)
+        let root = Workspace.get(byName: name).rootTilingContainer
+        let window = TestWindow.new(id: 1, parent: root)
+        reconcileSmoothWorkspaceLayouts()
+        assertTrue(window.isFullscreen)
+
+        SmoothLayoutSettingsStore.shared.replaceProfilesForTests(
+            ["Test Monitor": profile(style: .manual)],
+            invalidateSnapshots: false,
+        )
+        reconcileSmoothWorkspaceLayouts()
+        assertFalse(window.isFullscreen)
+
+        window.isFullscreen = true
+        reconcileSmoothWorkspaceLayouts()
+        assertTrue(window.isFullscreen)
+    }
+
     func testPreviewProducesOneFramePerWindowForEveryStyleAndCount() {
         for style in SmoothLayoutStyle.allCases {
             for count in 1 ... 10 {
@@ -134,7 +174,7 @@ final class SmoothWorkspaceLayoutTest: XCTestCase {
                     count: count,
                     monitorIsHorizontal: true,
                 )
-                assertEquals(frames.count, style == .fullscreen && count == 1 ? 1 : count)
+                assertEquals(frames.count, style == .manual ? 0 : count)
                 assertTrue(frames.allSatisfy {
                     $0.minX >= 0 && $0.minY >= 0 && $0.maxX <= 1 && $0.maxY <= 1 && $0.width > 0 && $0.height > 0
                 })
@@ -143,14 +183,16 @@ final class SmoothWorkspaceLayoutTest: XCTestCase {
     }
 
     private func enableStyle(_ style: SmoothLayoutStyle) {
-        SmoothLayoutSettingsStore.shared.replaceProfilesForTests([
-            "Test Monitor": SmoothMonitorLayoutProfile(
-                monitorName: "Test Monitor",
-                enabled: true,
-                tileLimit: 10,
-                styles: Array(repeating: style, count: SmoothMonitorLayoutProfile.configuredWindowCount),
-            ),
-        ])
+        SmoothLayoutSettingsStore.shared.replaceProfilesForTests(["Test Monitor": profile(style: style)])
+    }
+
+    private func profile(style: SmoothLayoutStyle) -> SmoothMonitorLayoutProfile {
+        SmoothMonitorLayoutProfile(
+            monitorName: "Test Monitor",
+            enabled: true,
+            tileLimit: 10,
+            styles: Array(repeating: style, count: SmoothMonitorLayoutProfile.configuredWindowCount),
+        )
     }
 
     private func expectedDwindle(_ ids: [UInt32], orientationIsHorizontal: Bool) -> LayoutDescription {
