@@ -146,6 +146,7 @@ final class SmoothLayoutSettingsStore: ObservableObject {
     private let defaults: UserDefaults
 
     @Published private(set) var profiles: [String: SmoothMonitorLayoutProfile]
+    @Published private(set) var monitorConfigurationRevision = 0
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -223,6 +224,17 @@ final class SmoothLayoutSettingsStore: ObservableObject {
     func resetProfile(monitorName: String, isHorizontal: Bool) {
         profiles[monitorName] = .defaultProfile(monitorName: monitorName, isHorizontal: isHorizontal)
         didChangeLayoutSettings()
+    }
+
+    func monitorsDidChange(_ monitors: [MonitorInfo]) {
+        // NSScreen indices are temporary and can change every time a display is
+        // disconnected. Profiles are keyed by the stable display name, so make
+        // sure every reconnected monitor is matched before refreshing the UI.
+        for monitor in monitors {
+            _ = profile(for: monitor)
+        }
+        monitorConfigurationRevision &+= 1
+        invalidateSmoothWorkspaceLayoutSnapshots()
     }
 
     private func didChangeLayoutSettings() {

@@ -3,12 +3,13 @@ import SwiftUI
 let smoothLayoutSettingsWindowId = "aerospace-smooth-layout-settings"
 
 private struct SmoothMonitorSummary: Identifiable, Hashable {
-    let screenId: Int
     let name: String
     let width: CGFloat
     let height: CGFloat
 
-    var id: String { "\(screenId):\(name)" }
+    // The AppKit screen index is reassigned after a display reconnect. Layout
+    // profiles are already keyed by name, so use the same stable identity here.
+    var id: String { name }
     var isHorizontal: Bool { width >= height }
     var orientationTitle: String { isHorizontal ? "Horizontal" : "Vertical" }
 }
@@ -704,7 +705,6 @@ private struct MonitorLayoutsSettingsPane: View {
     private var monitors: [SmoothMonitorSummary] {
         sortedMonitorInfos.map {
             SmoothMonitorSummary(
-                screenId: $0.monitorAppKitNsScreenScreensId,
                 name: $0.name,
                 width: $0.width,
                 height: $0.height,
@@ -739,6 +739,11 @@ private struct MonitorLayoutsSettingsPane: View {
                 _ = settings.profile(for: monitor)
             }
             if selectedMonitorId == nil {
+                selectedMonitorId = monitors.first?.id
+            }
+        }
+        .onChange(of: settings.monitorConfigurationRevision) { _ in
+            if !monitors.contains(where: { $0.id == selectedMonitorId }) {
                 selectedMonitorId = monitors.first?.id
             }
         }
