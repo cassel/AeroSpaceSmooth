@@ -226,6 +226,19 @@ final class SmoothWorkspaceLayoutTest: XCTestCase {
         ))
     }
 
+    func testConstraintFallbackDoesNotCancelUserFullscreen() async {
+        enableStyle(.dwindle)
+        let root = Workspace.get(byName: name).rootTilingContainer
+        let windows = (1 ... 3).map { TestWindow.new(id: UInt32($0), parent: root) }
+        reconcileSmoothWorkspaceLayouts()
+
+        windows[0].isFullscreen = true
+        await reconcileSmoothWorkspaceLayoutsRespectingWindowConstraints()
+
+        assertTrue(windows[0].isFullscreen)
+        assertEquals(root.layoutDescription, expectedDwindle([1, 2, 3], orientationIsHorizontal: true))
+    }
+
     private func enableStyle(_ style: SmoothLayoutStyle) {
         SmoothLayoutSettingsStore.shared.replaceProfilesForTests(["Test Monitor": profile(style: style)])
     }

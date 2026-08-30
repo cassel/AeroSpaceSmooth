@@ -175,6 +175,7 @@ private func smoothConstraintFallbackWorkspaces() async -> Set<String> {
     for workspace in Workspace.all where workspace.isVisible {
         let windows = workspace.rootTilingContainer.allLeafWindowsRecursive
         guard !windows.isEmpty,
+              !windows.contains(where: \.isFullscreen),
               let previous = smoothWorkspaceLayoutSnapshots[workspace.name],
               !previous.usesConstraintFallback
         else { continue }
