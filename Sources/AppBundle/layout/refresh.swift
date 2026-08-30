@@ -152,6 +152,7 @@ func refreshObs(_: AXObserver, _: AXUIElement, notif: CFString, _: UnsafeMutable
 
 enum OptimalHideCorner {
     case bottomLeftCorner, bottomRightCorner
+    case bottomEdge
 }
 
 @MainActor
@@ -166,31 +167,6 @@ private func layoutWorkspaces() async throws {
         return
     }
     let monitors = monitorInfos
-    var monitorToOptimalHideCorner: [CGPoint: OptimalHideCorner] = [:]
-    for monitor in monitors {
-        let xOff = monitor.width * 0.1
-        let yOff = monitor.height * 0.1
-        // brc = bottomRightCorner
-        let brc1 = monitor.rect.bottomRightCorner + CGPoint(x: 2, y: -yOff)
-        let brc2 = monitor.rect.bottomRightCorner + CGPoint(x: -xOff, y: 2)
-        let brc3 = monitor.rect.bottomRightCorner + CGPoint(x: 2, y: 2)
-
-        // blc = bottomLeftCorner
-        let blc1 = monitor.rect.bottomLeftCorner + CGPoint(x: -2, y: -yOff)
-        let blc2 = monitor.rect.bottomLeftCorner + CGPoint(x: xOff, y: 2)
-        let blc3 = monitor.rect.bottomLeftCorner + CGPoint(x: -2, y: 2)
-
-        func contains(_ monitor: MonitorInfo, _ point: CGPoint) -> Int { monitor.rect.contains(point) ? 1 : 0 }
-        let important = 10
-
-        let corner: OptimalHideCorner =
-            monitors.sumOfInt { contains($0, blc1) + contains($0, blc2) + important * contains($0, blc3) } <
-            monitors.sumOfInt { contains($0, brc1) + contains($0, brc2) + important * contains($0, brc3) }
-            ? .bottomLeftCorner
-            : .bottomRightCorner
-        monitorToOptimalHideCorner[monitor.rect.topLeftCorner] = corner
-    }
-
     // to reduce flicker, first unhide visible workspaces, then hide invisible ones
     for monitor in monitors {
         let workspace = monitor.activeWorkspace
@@ -199,9 +175,11 @@ private func layoutWorkspaces() async throws {
     }
     LayoutAnimator.shared.apply(transaction)
     for workspace in Workspace.all where !workspace.isVisible {
-        let corner = monitorToOptimalHideCorner[workspace.workspaceMonitor.rect.topLeftCorner] ?? .bottomRightCorner
         for window in workspace.allLeafWindowsRecursive {
-            try await (window as! MacWindow).hideInCorner(corner) // todo as!
+            // Left/right edges can touch neighboring displays. The bottom edge
+            // keeps the AX anchor inside the source monitor (so macOS accepts
+            // it) while extending the inactive window into empty space below.
+            try await (window as! MacWindow).hideInCorner(.bottomEdge) // todo as!
         }
     }
 }

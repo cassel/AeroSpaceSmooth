@@ -150,6 +150,13 @@ final class MacWindow: Window {
                 // todo this ad hoc won't be necessary once I implement optimization suggested by Zalim
                 let onePixelOffset = macApp.appId == .zoom ? .zero : CGPoint(x: 1, y: 1)
                 p = nodeMonitor.visibleRect.bottomRightCorner - onePixelOffset
+            case .bottomEdge:
+                guard let size = try await getAxSize(.cancellable) else { return }
+                p = bottomEdgeHideOrigin(
+                    monitorRect: nodeMonitor.visibleRect,
+                    windowSize: size,
+                    edgeInset: macApp.appId == .zoom ? 0 : 1,
+                )
         }
         setAxFrame(p, nil)
     }
@@ -197,6 +204,15 @@ final class MacWindow: Window {
     override func getAxRect(_ cm: CancellationMode) async throws -> Rect? {
         try await macApp.getAxRect(windowId, cm)
     }
+}
+
+func bottomEdgeHideOrigin(monitorRect: Rect, windowSize: CGSize, edgeInset: CGFloat = 1) -> CGPoint {
+    let maximumX = max(monitorRect.minX, monitorRect.maxX - windowSize.width)
+    let centeredX = monitorRect.center.x - windowSize.width / 2
+    return CGPoint(
+        x: centeredX.coerce(in: monitorRect.minX ... maximumX),
+        y: monitorRect.maxY - edgeInset,
+    )
 }
 
 extension Window {

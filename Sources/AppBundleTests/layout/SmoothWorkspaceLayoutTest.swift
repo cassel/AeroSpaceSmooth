@@ -182,6 +182,22 @@ final class SmoothWorkspaceLayoutTest: XCTestCase {
         }
     }
 
+    func testBottomEdgeHideOriginDoesNotLeakIntoSideBySideMonitors() {
+        let macBook = Rect(topLeftX: 0, topLeftY: 0, width: 1512, height: 982)
+        let origin = bottomEdgeHideOrigin(
+            monitorRect: macBook,
+            windowSize: CGSize(width: 935, height: 600),
+        )
+        let hiddenWindow = CGRect(origin: origin, size: CGSize(width: 935, height: 600))
+        let ultra = CGRect(x: 1512, y: -523, width: 3780, height: 2160)
+        let vertical = CGRect(x: -1296, y: -594, width: 1296, height: 2304)
+
+        assertEquals(origin, CGPoint(x: 288.5, y: 981))
+        assertTrue(hiddenWindow.intersection(CGRect(x: 0, y: 0, width: 1512, height: 982)).height <= 1)
+        assertTrue(hiddenWindow.intersection(ultra).isNull)
+        assertTrue(hiddenWindow.intersection(vertical).isNull)
+    }
+
     private func enableStyle(_ style: SmoothLayoutStyle) {
         SmoothLayoutSettingsStore.shared.replaceProfilesForTests(["Test Monitor": profile(style: style)])
     }
