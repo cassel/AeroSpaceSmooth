@@ -1,6 +1,51 @@
-# AeroSpace Beta [![Build](https://github.com/nikitabobko/AeroSpace/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/nikitabobko/AeroSpace/actions/workflows/build.yml)
+# AeroSpaceSmooth
 
 <img src="./resources/Assets.xcassets/AppIcon.appiconset/icon.png" width="40%" align="right">
+
+AeroSpaceSmooth is an experimental fork of
+[nikitabobko/AeroSpace](https://github.com/nikitabobko/AeroSpace) focused on a
+friendlier, more visual macOS tiling experience. It keeps AeroSpace's tree,
+workspaces, CLI, and TOML configuration while adding smooth coordinated window
+movement and a native Settings interface.
+
+> [!IMPORTANT]
+> This is an independent development fork, not an official AeroSpace release.
+> The repository currently provides source code only. The Homebrew command in
+> the upstream README below installs the original AeroSpace, not AeroSpaceSmooth.
+
+## What this fork adds
+
+- A native menu-bar **Settings…** window, written in SwiftUI.
+- Visual editing for General, Workspaces, Applications, Automation, Shortcuts,
+  and the active TOML file.
+- Per-monitor automatic layout profiles for every window count from 1 through 10.
+- Fullscreen, Dwindle, Vertical Pairs, Grid, Columns, Rows, and Custom layouts.
+- Monitor previews that use the connected display's real aspect ratio and resolution.
+- A direct-manipulation Custom editor with draggable dividers, exact proportions,
+  presets, Hybrid Dwindle, tile ordering, split controls, undo, and redo.
+- Configurable per-monitor window limits with overflow routed to another workspace
+  on the same monitor.
+- Coordinated window animations with configurable duration and Reduce Motion support.
+- Automatic reflow after windows open, close, or move, while intentional manual
+  `join-with` grouping remains stable until workspace membership changes.
+- Comment-preserving TOML updates, preview, validation, reload, and visual shortcut editing.
+
+Read the complete [AeroSpaceSmooth feature and Settings guide](./AEROSPACE_SMOOTH.md)
+for the design goals, every Settings page, layout behavior, keyboard workflow,
+multi-monitor model, limitations, and build instructions.
+
+## Project status
+
+AeroSpaceSmooth is currently a source-built development version. It has been used
+as a daily multi-monitor setup, but packaging, code signing, notarization, migration,
+and public releases still need dedicated work before it should be treated as a
+drop-in distribution for general users.
+
+---
+
+# Upstream AeroSpace README
+
+[![Build](https://github.com/nikitabobko/AeroSpace/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/nikitabobko/AeroSpace/actions/workflows/build.yml)
 
 AeroSpace is an i3-like tiling window manager for macOS
 
