@@ -10,6 +10,22 @@ enum SmoothSplitAxis: String, Codable, CaseIterable, Identifiable, Sendable {
     var opposite: SmoothSplitAxis { self == .horizontal ? .vertical : .horizontal }
 }
 
+enum SmoothCustomLayoutBranch: String, Hashable, Sendable {
+    case first
+    case second
+}
+
+struct SmoothCustomLayoutSplit: Identifiable, Equatable, Sendable {
+    let path: [SmoothCustomLayoutBranch]
+    let axis: SmoothSplitAxis
+    let ratio: Double
+    let region: CGRect
+
+    var id: String {
+        path.isEmpty ? "root" : path.map(\.rawValue).joined(separator: ".")
+    }
+}
+
 enum SmoothCustomLayoutValidationError: LocalizedError, Equatable {
     case unsupportedSchema(Int)
     case invalidWindowCount(Int)
@@ -93,6 +109,76 @@ indirect enum SmoothCustomLayoutNode: Equatable, Sendable {
                     return (axis, ratio)
                 }
                 return first.contains(slot: slot) ? first.parentSplit(of: slot) : second.parentSplit(of: slot)
+        }
+    }
+
+    func splits(
+        in region: CGRect = CGRect(x: 0, y: 0, width: 1, height: 1),
+        path: [SmoothCustomLayoutBranch] = [],
+    ) -> [SmoothCustomLayoutSplit] {
+        switch self {
+            case .window:
+                return []
+            case .split(let axis, let ratio, let first, let second):
+                let firstRegion: CGRect
+                let secondRegion: CGRect
+                switch axis {
+                    case .horizontal:
+                        firstRegion = CGRect(
+                            x: region.minX,
+                            y: region.minY,
+                            width: region.width * ratio,
+                            height: region.height,
+                        )
+                        secondRegion = CGRect(
+                            x: firstRegion.maxX,
+                            y: region.minY,
+                            width: region.width - firstRegion.width,
+                            height: region.height,
+                        )
+                    case .vertical:
+                        firstRegion = CGRect(
+                            x: region.minX,
+                            y: region.minY,
+                            width: region.width,
+                            height: region.height * ratio,
+                        )
+                        secondRegion = CGRect(
+                            x: region.minX,
+                            y: firstRegion.maxY,
+                            width: region.width,
+                            height: region.height - firstRegion.height,
+                        )
+                }
+                return [SmoothCustomLayoutSplit(path: path, axis: axis, ratio: ratio, region: region)]
+                    + first.splits(in: firstRegion, path: path + [.first])
+                    + second.splits(in: secondRegion, path: path + [.second])
+        }
+    }
+
+    func settingSplitRatio(
+        _ ratio: Double,
+        at path: ArraySlice<SmoothCustomLayoutBranch>,
+    ) -> SmoothCustomLayoutNode {
+        guard case .split(let axis, let currentRatio, let first, let second) = self else { return self }
+        guard let branch = path.first else {
+            return .split(axis: axis, ratio: ratio, first: first, second: second)
+        }
+        switch branch {
+            case .first:
+                return .split(
+                    axis: axis,
+                    ratio: currentRatio,
+                    first: first.settingSplitRatio(ratio, at: path.dropFirst()),
+                    second: second,
+                )
+            case .second:
+                return .split(
+                    axis: axis,
+                    ratio: currentRatio,
+                    first: first,
+                    second: second.settingSplitRatio(ratio, at: path.dropFirst()),
+                )
         }
     }
 
@@ -250,6 +336,7 @@ struct SmoothCustomLayoutBlueprint: Codable, Equatable, Sendable {
 
     var isValid: Bool { (try? validate()) != nil }
     var frames: [Int: CGRect] { root.frames() }
+    var splits: [SmoothCustomLayoutSplit] { root.splits() }
 
     mutating func swapSlots(_ lhs: Int, _ rhs: Int) {
         guard lhs != rhs, root.contains(slot: lhs), root.contains(slot: rhs) else { return }
@@ -267,6 +354,10 @@ struct SmoothCustomLayoutBlueprint: Codable, Equatable, Sendable {
         root = root.updatingParent(of: slot) { axis, _, first, second in
             .split(axis: axis, ratio: ratio, first: first, second: second)
         }
+    }
+
+    mutating func setSplitRatio(_ ratio: Double, at path: [SmoothCustomLayoutBranch]) {
+        root = root.settingSplitRatio(min(max(ratio, 0.10), 0.90), at: path[...])
     }
 
     mutating func reverseParent(of slot: Int) {

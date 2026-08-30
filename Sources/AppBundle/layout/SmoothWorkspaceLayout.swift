@@ -35,17 +35,46 @@ private struct SmoothWorkspaceLayoutSnapshot {
 @MainActor
 private var smoothWorkspaceLayoutSnapshots: [String: SmoothWorkspaceLayoutSnapshot] = [:]
 
+// Tree commands are normalized after they run. Remember the user's intent until
+// that normalization pass finishes, then adopt the normalized result as the new
+// stable Smooth topology instead of rebuilding the configured preset over it.
+@MainActor
+private var smoothWorkspaceManualTreeOverrides: Set<String> = []
+
 @MainActor
 private var isReconcilingSmoothWorkspaceLayouts = false
 
 @MainActor
 func invalidateSmoothWorkspaceLayoutSnapshots() {
     smoothWorkspaceLayoutSnapshots = [:]
+    smoothWorkspaceManualTreeOverrides = []
 }
 
 @MainActor
 func invalidateSmoothWorkspaceLayoutSnapshot(workspaceName: String) {
     smoothWorkspaceLayoutSnapshots.removeValue(forKey: workspaceName)
+    smoothWorkspaceManualTreeOverrides.remove(workspaceName)
+}
+
+@MainActor
+func preserveCurrentSmoothWorkspaceTreeAfterUserCommand(_ workspace: Workspace) {
+    guard let previous = smoothWorkspaceLayoutSnapshots[workspace.name] else { return }
+    let currentWindows = workspace.rootTilingContainer.allLeafWindowsRecursive
+    guard previous.windowIds.toSet() == currentWindows.map(\.windowId).toSet() else {
+        smoothWorkspaceLayoutSnapshots.removeValue(forKey: workspace.name)
+        smoothWorkspaceManualTreeOverrides.remove(workspace.name)
+        return
+    }
+    smoothWorkspaceManualTreeOverrides.insert(workspace.name)
+    smoothWorkspaceLayoutSnapshots[workspace.name] = SmoothWorkspaceLayoutSnapshot(
+        monitorName: previous.monitorName,
+        monitorIsHorizontal: previous.monitorIsHorizontal,
+        style: previous.style,
+        customLayout: previous.customLayout,
+        windowIds: currentWindows.map(\.windowId),
+        treeShape: smoothTreeShape(workspace.rootTilingContainer),
+        usesConstraintFallback: previous.usesConstraintFallback,
+    )
 }
 
 @MainActor
@@ -55,8 +84,11 @@ func reconcileSmoothWorkspaceLayouts() {
 
 @MainActor
 func reconcileSmoothWorkspaceLayoutsRespectingWindowConstraints() async {
-    let fallbackWorkspaces = await smoothConstraintFallbackWorkspaces()
-    reconcileSmoothWorkspaceLayouts(constraintFallbackWorkspaces: fallbackWorkspaces)
+    // The selected layout is authoritative. Falling back to Grid when an app
+    // reports a larger minimum AX size makes an explicit Dwindle selection
+    // appear to be ignored and causes the tree to change again moments later.
+    // macOS may clamp that individual window, but keep the requested topology.
+    reconcileSmoothWorkspaceLayouts()
 }
 
 @MainActor
@@ -91,6 +123,22 @@ private func reconcileSmoothWorkspaceLayouts(constraintFallbackWorkspaces: Set<S
         let currentWindowIds = currentWindows.map(\.windowId)
         let monitorIsHorizontal = monitor.width >= monitor.height
         let currentTreeShape = smoothTreeShape(root)
+
+        if smoothWorkspaceManualTreeOverrides.remove(workspace.name) != nil,
+           let previous,
+           previous.windowIds.toSet() == currentWindowIds.toSet()
+        {
+            smoothWorkspaceLayoutSnapshots[workspace.name] = SmoothWorkspaceLayoutSnapshot(
+                monitorName: monitor.name,
+                monitorIsHorizontal: monitorIsHorizontal,
+                style: style,
+                customLayout: customLayout,
+                windowIds: currentWindowIds,
+                treeShape: currentTreeShape,
+                usesConstraintFallback: false,
+            )
+            continue
+        }
 
         // Profiles created before the visual Custom editor have no blueprint.
         // Preserve their original manual/no-op behavior until a design is saved.
@@ -165,47 +213,6 @@ private func reconcileSmoothWorkspaceLayouts(constraintFallbackWorkspaces: Set<S
             usesConstraintFallback: false,
         )
     }
-}
-
-@MainActor
-private func smoothConstraintFallbackWorkspaces() async -> Set<String> {
-    guard !LayoutAnimator.shared.isAnimating else { return [] }
-    var result: Set<String> = []
-
-    for workspace in Workspace.all where workspace.isVisible {
-        let windows = workspace.rootTilingContainer.allLeafWindowsRecursive
-        guard !windows.isEmpty,
-              !windows.contains(where: \.isFullscreen),
-              let previous = smoothWorkspaceLayoutSnapshots[workspace.name],
-              !previous.usesConstraintFallback
-        else { continue }
-
-        let monitor = workspace.workspaceMonitor
-        let profile = SmoothLayoutSettingsStore.shared.profile(for: monitor)
-        guard profile.enabled else { continue }
-        let style = profile.style(for: windows.count)
-        let customLayout = style == .manual ? profile.customLayout(for: windows.count) : nil
-        guard previous.canReuseLayout(
-            monitorName: monitor.name,
-            monitorIsHorizontal: monitor.width >= monitor.height,
-            style: style,
-            customLayout: customLayout,
-            windowIds: windows.map(\.windowId),
-            treeShape: smoothTreeShape(workspace.rootTilingContainer),
-        ) else { continue }
-
-        for window in windows {
-            guard let target = window.lastAppliedLayoutPhysicalRect,
-                  let macWindow = window as? MacWindow,
-                  let actual = try? await macWindow.getAxRect(.cancellable)
-            else { continue }
-            if smoothWindowExceedsTile(actual: actual, target: target) {
-                result.insert(workspace.name)
-                break
-            }
-        }
-    }
-    return result
 }
 
 func smoothWindowExceedsTile(actual: Rect, target: Rect, tolerance: CGFloat = 8) -> Bool {

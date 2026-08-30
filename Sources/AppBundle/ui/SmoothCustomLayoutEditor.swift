@@ -3,7 +3,8 @@ import SwiftUI
 @MainActor
 struct SmoothCustomLayoutEditorView: View {
     let monitorName: String
-    let monitorIsHorizontal: Bool
+    let monitorWidth: CGFloat
+    let monitorHeight: CGFloat
     let previousLayout: SmoothCustomLayoutBlueprint?
     let onSave: (SmoothCustomLayoutBlueprint) -> Void
 
@@ -14,21 +15,26 @@ struct SmoothCustomLayoutEditorView: View {
     @State private var primaryAxis: SmoothSplitAxis
     @State private var undoStack: [SmoothCustomLayoutBlueprint] = []
     @State private var redoStack: [SmoothCustomLayoutBlueprint] = []
+    @State private var interactiveEditStart: SmoothCustomLayoutBlueprint?
+
+    private var monitorIsHorizontal: Bool { monitorWidth >= monitorHeight }
 
     init(
         monitorName: String,
-        monitorIsHorizontal: Bool,
+        monitorWidth: CGFloat,
+        monitorHeight: CGFloat,
         layout: SmoothCustomLayoutBlueprint,
         previousLayout: SmoothCustomLayoutBlueprint?,
         onSave: @escaping (SmoothCustomLayoutBlueprint) -> Void,
     ) {
         self.monitorName = monitorName
-        self.monitorIsHorizontal = monitorIsHorizontal
+        self.monitorWidth = max(monitorWidth, 1)
+        self.monitorHeight = max(monitorHeight, 1)
         self.previousLayout = previousLayout
         self.onSave = onSave
         _draft = State(initialValue: layout)
         _hybridStart = State(initialValue: min(max(3, layout.windowCount), 4))
-        _primaryAxis = State(initialValue: monitorIsHorizontal ? .horizontal : .vertical)
+        _primaryAxis = State(initialValue: monitorWidth >= monitorHeight ? .horizontal : .vertical)
     }
 
     var body: some View {
@@ -40,12 +46,12 @@ struct SmoothCustomLayoutEditorView: View {
                     .padding(24)
                 Divider()
                 controls
-                    .frame(width: 310)
+                    .frame(width: 330)
             }
             Divider()
             editorFooter
         }
-        .frame(minWidth: 900, minHeight: 620)
+        .frame(minWidth: 980, minHeight: 680)
     }
 
     private var editorHeader: some View {
@@ -75,14 +81,24 @@ struct SmoothCustomLayoutEditorView: View {
 
     private var canvas: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Select a numbered tile, then edit its parent split.")
+            Text("Drag a glowing divider to resize. Select a tile for exact controls.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
-            SmoothCustomLayoutCanvas(layout: draft, selectedSlot: $selectedSlot)
-                .aspectRatio(monitorIsHorizontal ? 16 / 9 : 9 / 16, contentMode: .fit)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            SmoothMonitorPreviewFrame(
+                monitorName: monitorName,
+                monitorWidth: monitorWidth,
+                monitorHeight: monitorHeight,
+            ) {
+                SmoothCustomLayoutCanvas(
+                    layout: $draft,
+                    selectedSlot: $selectedSlot,
+                    onResizeBegan: beginInteractiveEdit,
+                    onResizeEnded: endInteractiveEdit,
+                )
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             Label(
-                "The preview is isolated. Real windows move only after Save Layout.",
+                "Accurate \(Int(monitorWidth)) × \(Int(monitorHeight)) aspect ratio. Real windows move only after Save Layout.",
                 systemImage: "checkmark.shield",
             )
             .font(.caption)
@@ -144,7 +160,20 @@ struct SmoothCustomLayoutEditorView: View {
     }
 
     private var selectedTileControls: some View {
-        controlSection("Selected Tile \(selectedSlot + 1)", help: "Move changes which logical window occupies this region. Direction, ratio and reverse edit the split directly surrounding the selected tile.") {
+        controlSection("Selected Tile \(selectedSlot + 1)", help: "Drag a divider in the monitor preview for direct resizing. These controls provide exact sizing and change the split directly surrounding the selected tile.") {
+            if let frame = draft.frames[selectedSlot] {
+                HStack(spacing: 8) {
+                    Label(
+                        "\(Int((frame.width * monitorWidth).rounded())) × \(Int((frame.height * monitorHeight).rounded()))",
+                        systemImage: "rectangle.dashed",
+                    )
+                    Spacer()
+                    Text("\(Int((frame.width * 100).rounded()))% × \(Int((frame.height * 100).rounded()))%")
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
             HStack {
                 Button("Move Earlier") {
                     commit { $0.swapSlots(selectedSlot, selectedSlot - 1) }
@@ -174,10 +203,17 @@ struct SmoothCustomLayoutEditorView: View {
             Slider(
                 value: Binding(
                     get: { draft.root.parentSplit(of: selectedSlot)?.ratio ?? 0.5 },
-                    set: { ratio in commit { $0.setParentRatio(ratio, of: selectedSlot) } },
+                    set: { ratio in draft.setParentRatio(ratio, of: selectedSlot) },
                 ),
                 in: 0.10 ... 0.90,
-                step: 0.05,
+                step: 0.01,
+                onEditingChanged: { editing in
+                    if editing {
+                        beginInteractiveEdit()
+                    } else {
+                        endInteractiveEdit()
+                    }
+                },
             )
 
             HStack {
@@ -257,6 +293,21 @@ struct SmoothCustomLayoutEditorView: View {
         redoStack = []
     }
 
+    private func beginInteractiveEdit() {
+        if interactiveEditStart == nil {
+            interactiveEditStart = draft
+        }
+    }
+
+    private func endInteractiveEdit() {
+        guard let before = interactiveEditStart else { return }
+        interactiveEditStart = nil
+        guard before != draft else { return }
+        undoStack.append(before)
+        if undoStack.count > 100 { undoStack.removeFirst() }
+        redoStack = []
+    }
+
     private func undo() {
         guard let previous = undoStack.popLast() else { return }
         redoStack.append(draft)
@@ -272,9 +323,71 @@ struct SmoothCustomLayoutEditorView: View {
     }
 }
 
+struct SmoothMonitorPreviewFrame<Content: View>: View {
+    let monitorName: String
+    let monitorWidth: CGFloat
+    let monitorHeight: CGFloat
+    let content: Content
+
+    init(
+        monitorName: String,
+        monitorWidth: CGFloat,
+        monitorHeight: CGFloat,
+        @ViewBuilder content: () -> Content,
+    ) {
+        self.monitorName = monitorName
+        self.monitorWidth = max(monitorWidth, 1)
+        self.monitorHeight = max(monitorHeight, 1)
+        self.content = content()
+    }
+
+    var body: some View {
+        GeometryReader { geometry in
+            let size = fittedSize(in: geometry.size)
+            ZStack {
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .fill(Color(nsColor: .windowFrameTextColor).opacity(0.82))
+                    .shadow(color: .black.opacity(0.24), radius: 10, y: 5)
+
+                content
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .padding(7)
+            }
+            .overlay(alignment: .topTrailing) {
+                Text("\(Int(monitorWidth)) × \(Int(monitorHeight))")
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(.black.opacity(0.65), in: Capsule())
+                    .padding(11)
+                    .allowsHitTesting(false)
+            }
+            .accessibilityLabel("\(monitorName), \(Int(monitorWidth)) by \(Int(monitorHeight))")
+            .frame(width: size.width, height: size.height)
+            .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+        }
+    }
+
+    private func fittedSize(in available: CGSize) -> CGSize {
+        let width = max(available.width, 1)
+        let height = max(available.height, 1)
+        let ratio = monitorWidth / monitorHeight
+        if width / height > ratio {
+            return CGSize(width: height * ratio, height: height)
+        }
+        return CGSize(width: width, height: width / ratio)
+    }
+}
+
 private struct SmoothCustomLayoutCanvas: View {
-    let layout: SmoothCustomLayoutBlueprint
+    @Binding var layout: SmoothCustomLayoutBlueprint
     @Binding var selectedSlot: Int
+    let onResizeBegan: () -> Void
+    let onResizeEnded: () -> Void
+
+    @State private var hoveredSplitId: String?
+    @State private var activeSplitId: String?
 
     var body: some View {
         GeometryReader { geometry in
@@ -330,7 +443,88 @@ private struct SmoothCustomLayoutCanvas: View {
                         .accessibilityLabel("Window slot \(slot + 1)")
                     }
                 }
+
+                ForEach(layout.splits) { split in
+                    splitHandle(split, canvas: canvas)
+                }
+
+                if layout.windowCount == 1 {
+                    Text("Full display area")
+                        .font(.caption.bold())
+                        .foregroundStyle(.white.opacity(0.72))
+                        .padding(8)
+                        .allowsHitTesting(false)
+                }
             }
+            .coordinateSpace(name: "customLayoutCanvas")
         }
+    }
+
+    @ViewBuilder
+    private func splitHandle(_ split: SmoothCustomLayoutSplit, canvas: CGRect) -> some View {
+        let boundary = CGPoint(
+            x: canvas.minX + (split.region.minX + (split.axis == .horizontal ? split.region.width * split.ratio : 0)) * canvas.width,
+            y: canvas.minY + (split.region.minY + (split.axis == .vertical ? split.region.height * split.ratio : 0)) * canvas.height,
+        )
+        let isEmphasized = hoveredSplitId == split.id || activeSplitId == split.id
+        let handleWidth = split.axis == .horizontal ? CGFloat(24) : split.region.width * canvas.width
+        let handleHeight = split.axis == .horizontal ? split.region.height * canvas.height : CGFloat(24)
+        let offsetX = split.axis == .horizontal ? boundary.x - handleWidth / 2 : canvas.minX + split.region.minX * canvas.width
+        let offsetY = split.axis == .horizontal ? canvas.minY + split.region.minY * canvas.height : boundary.y - handleHeight / 2
+
+        ZStack {
+            Rectangle()
+                .fill(.clear)
+                .contentShape(Rectangle())
+
+            Capsule()
+                .fill(isEmphasized ? Color.white : Color.cyan.opacity(0.78))
+                .frame(
+                    width: split.axis == .horizontal ? 4 : min(42, max(handleWidth * 0.18, 18)),
+                    height: split.axis == .horizontal ? min(42, max(handleHeight * 0.18, 18)) : 4,
+                )
+                .shadow(color: .black.opacity(0.45), radius: 2)
+
+            Image(systemName: split.axis == .horizontal ? "arrow.left.and.right" : "arrow.up.and.down")
+                .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(.white)
+                .padding(4)
+                .background(Color.accentColor, in: Circle())
+                .opacity(isEmphasized ? 1 : 0.86)
+        }
+        .frame(width: max(handleWidth, 1), height: max(handleHeight, 1))
+        .offset(x: offsetX, y: offsetY)
+        .onHover { hovering in
+            hoveredSplitId = hovering ? split.id : (hoveredSplitId == split.id ? nil : hoveredSplitId)
+        }
+        .gesture(
+            DragGesture(minimumDistance: 0, coordinateSpace: .named("customLayoutCanvas"))
+                .onChanged { value in
+                    if activeSplitId == nil {
+                        activeSplitId = split.id
+                        onResizeBegan()
+                    }
+                    let ratio: Double = switch split.axis {
+                        case .horizontal:
+                            Double(
+                                (value.location.x - canvas.minX - split.region.minX * canvas.width)
+                                    / max(split.region.width * canvas.width, 1),
+                            )
+                        case .vertical:
+                            Double(
+                                (value.location.y - canvas.minY - split.region.minY * canvas.height)
+                                    / max(split.region.height * canvas.height, 1),
+                            )
+                    }
+                    layout.setSplitRatio(ratio, at: split.path)
+                }
+                .onEnded { _ in
+                    activeSplitId = nil
+                    onResizeEnded()
+                },
+        )
+        .help("Drag to resize the tiles on both sides")
+        .accessibilityLabel(split.axis == .horizontal ? "Vertical resize divider" : "Horizontal resize divider")
+        .accessibilityValue("First region \(Int((split.ratio * 100).rounded())) percent")
     }
 }

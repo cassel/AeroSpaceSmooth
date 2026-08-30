@@ -66,6 +66,53 @@ final class SmoothCustomLayoutTest: XCTestCase {
         assertRect(layout.frames[2], x: 0.5, y: 0.5, width: 0.5, height: 0.5)
     }
 
+    func testSplitDescriptorsExposeResizableDividersAndRegions() throws {
+        let layout = SmoothCustomLayoutBlueprint.preset(
+            style: .dwindle,
+            windowCount: 3,
+            monitorIsHorizontal: true,
+        )
+
+        let root = try XCTUnwrap(layout.splits.first { $0.path.isEmpty })
+        let tail = try XCTUnwrap(layout.splits.first { $0.path == [.second] })
+        assertEquals(root.axis, .horizontal)
+        assertRect(root.region, x: 0, y: 0, width: 1, height: 1)
+        assertEquals(tail.axis, .vertical)
+        assertRect(tail.region, x: 0.5, y: 0, width: 0.5, height: 1)
+    }
+
+    func testDirectDividerResizeUpdatesOnlyTheSelectedSplit() throws {
+        var layout = SmoothCustomLayoutBlueprint.preset(
+            style: .dwindle,
+            windowCount: 3,
+            monitorIsHorizontal: true,
+        )
+
+        layout.setSplitRatio(0.65, at: [])
+        layout.setSplitRatio(0.7, at: [.second])
+
+        try layout.validate()
+        assertRect(layout.frames[0], x: 0, y: 0, width: 0.65, height: 1)
+        assertRect(layout.frames[1], x: 0.65, y: 0, width: 0.35, height: 0.7)
+        assertRect(layout.frames[2], x: 0.65, y: 0.7, width: 0.35, height: 0.3)
+    }
+
+    func testDirectDividerResizeClampsToSupportedRange() throws {
+        var layout = SmoothCustomLayoutBlueprint.preset(
+            style: .columns,
+            windowCount: 2,
+            monitorIsHorizontal: true,
+        )
+
+        layout.setSplitRatio(0.01, at: [])
+        try layout.validate()
+        assertRect(layout.frames[0], x: 0, y: 0, width: 0.10, height: 1)
+
+        layout.setSplitRatio(0.99, at: [])
+        try layout.validate()
+        assertRect(layout.frames[0], x: 0, y: 0, width: 0.90, height: 1)
+    }
+
     func testBlueprintRoundTripsThroughJSON() throws {
         var original = SmoothCustomLayoutBlueprint.hybridDwindle(
             windowCount: 6,

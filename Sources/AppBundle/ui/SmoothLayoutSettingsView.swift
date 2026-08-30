@@ -12,6 +12,7 @@ private struct SmoothMonitorSummary: Identifiable, Hashable {
     var id: String { name }
     var isHorizontal: Bool { width >= height }
     var orientationTitle: String { isHorizontal ? "Horizontal" : "Vertical" }
+    var layoutPreviewHeight: CGFloat { isHorizontal ? 180 : 260 }
 }
 
 private struct SmoothCustomLayoutEditorTarget: Identifiable {
@@ -750,7 +751,8 @@ private struct MonitorLayoutsSettingsPane: View {
         .sheet(item: $customEditorTarget) { target in
             SmoothCustomLayoutEditorView(
                 monitorName: target.monitor.name,
-                monitorIsHorizontal: target.monitor.isHorizontal,
+                monitorWidth: target.monitor.width,
+                monitorHeight: target.monitor.height,
                 layout: target.layout,
                 previousLayout: target.previousLayout,
             ) { layout in
@@ -845,11 +847,7 @@ private struct MonitorLayoutsSettingsPane: View {
                     .disabled(!profile.enabled)
                 }
 
-                LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 300), spacing: 14)],
-                    alignment: .leading,
-                    spacing: 14,
-                ) {
+                VStack(alignment: .leading, spacing: 14) {
                     ForEach(1 ... SmoothMonitorLayoutProfile.configuredWindowCount, id: \.self) { count in
                         layoutCard(
                             monitor: monitor,
@@ -887,43 +885,43 @@ private struct MonitorLayoutsSettingsPane: View {
                     message: style.detail + " This selection applies only to this monitor when exactly \(count) tiled \(count == 1 ? "window is" : "windows are") present.",
                 )
                 Spacer()
-                Picker(
-                    "Style",
-                    selection: Binding(
-                        // Read the live store value. Capturing `style` here lets
-                        // Picker write its old selection back while the sheet is
-                        // opening, leaving a saved blueprint inactive.
-                        get: {
-                            settings.profile(
-                                named: monitor.name,
-                                isHorizontal: monitor.isHorizontal,
-                            ).style(for: count)
-                        },
-                        set: {
+                Menu {
+                    ForEach(SmoothLayoutStyle.available(for: count)) { candidate in
+                        Button {
                             settings.setStyle(
-                                $0,
+                                candidate,
                                 windowCount: count,
                                 monitorName: monitor.name,
                                 isHorizontal: monitor.isHorizontal,
                             )
-                        },
-                    ),
-                ) {
-                    ForEach(SmoothLayoutStyle.available(for: count)) { candidate in
-                        Text(candidate.title).tag(candidate)
+                        } label: {
+                            if candidate == style {
+                                Label(candidate.title, systemImage: "checkmark")
+                            } else {
+                                Text(candidate.title)
+                            }
+                        }
                     }
+                } label: {
+                    Text(style.title)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .labelsHidden()
                 .frame(width: 160)
             }
 
-            SmoothLayoutPreview(
-                style: style,
-                windowCount: count,
-                monitorIsHorizontal: monitor.isHorizontal,
-                customLayout: customLayout,
-            )
-            .frame(height: monitor.isHorizontal ? 105 : 150)
+            SmoothMonitorPreviewFrame(
+                monitorName: monitor.name,
+                monitorWidth: monitor.width,
+                monitorHeight: monitor.height,
+            ) {
+                SmoothLayoutPreview(
+                    style: style,
+                    windowCount: count,
+                    monitorIsHorizontal: monitor.isHorizontal,
+                    customLayout: customLayout,
+                )
+            }
+            .frame(height: monitor.layoutPreviewHeight)
 
             if style == .manual {
                 Button {

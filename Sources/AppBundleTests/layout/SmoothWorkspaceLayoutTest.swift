@@ -91,6 +91,61 @@ final class SmoothWorkspaceLayoutTest: XCTestCase {
         )
     }
 
+    func testExplicitManualTreeEditIsPreservedUntilWindowMembershipChanges() {
+        enableStyle(.dwindle)
+        let workspace = Workspace.get(byName: name)
+        let root = workspace.rootTilingContainer
+        let windows = (1 ... 4).map { TestWindow.new(id: UInt32($0), parent: root) }
+        reconcileSmoothWorkspaceLayouts()
+
+        windows[0].bind(to: root, adaptiveWeight: WEIGHT_AUTO, index: INDEX_BIND_LAST)
+        let manuallyEditedTree = root.layoutDescription
+        preserveCurrentSmoothWorkspaceTreeAfterUserCommand(workspace)
+        reconcileSmoothWorkspaceLayouts()
+
+        assertEquals(root.layoutDescription, manuallyEditedTree)
+
+        TestWindow.new(id: 5, parent: root)
+        reconcileSmoothWorkspaceLayouts()
+        assertEquals(
+            root.layoutDescription,
+            expectedDwindle([2, 3, 4, 1, 5], orientationIsHorizontal: true),
+        )
+    }
+
+    func testExplicitManualTreeEditSurvivesNormalizationBeforeReconcile() {
+        enableStyle(.dwindle)
+        config.enableNormalizationFlattenContainers = true
+        let workspace = Workspace.get(byName: name)
+        let root = workspace.rootTilingContainer
+        let windows = (1 ... 4).map { TestWindow.new(id: UInt32($0), parent: root) }
+        reconcileSmoothWorkspaceLayouts()
+
+        let tail = root.children[1]
+        let previousBinding = tail.unbindFromParent()
+        let joined = TilingContainer(
+            parent: root,
+            adaptiveWeight: previousBinding.adaptiveWeight,
+            .v,
+            .tiles,
+            index: previousBinding.index,
+        )
+        windows[0].unbindFromParent()
+        tail.bind(to: joined, adaptiveWeight: WEIGHT_AUTO, index: 0)
+        windows[0].bind(to: joined, adaptiveWeight: WEIGHT_AUTO, index: 0)
+        preserveCurrentSmoothWorkspaceTreeAfterUserCommand(workspace)
+
+        workspace.normalizeContainers()
+        let normalizedManualTree = workspace.rootTilingContainer.layoutDescription
+        reconcileSmoothWorkspaceLayouts()
+
+        assertEquals(workspace.rootTilingContainer.layoutDescription, normalizedManualTree)
+        assertNotEquals(
+            workspace.rootTilingContainer.layoutDescription,
+            expectedDwindle([1, 2, 3, 4], orientationIsHorizontal: true),
+        )
+    }
+
     func testSameShapePreservesManualWindowOrder() {
         enableStyle(.dwindle)
         let root = Workspace.get(byName: name).rootTilingContainer

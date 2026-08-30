@@ -27,6 +27,10 @@ struct JoinWithCommand: Command {
 
         joinWithTarget.bind(to: newParent, adaptiveWeight: WEIGHT_AUTO, index: 0)
         currentWindow.bind(to: newParent, adaptiveWeight: WEIGHT_AUTO, index: direction.isPositive ? 0 : INDEX_BIND_LAST)
+        // A join is an intentional manual topology edit. Preserve it while the
+        // workspace membership is unchanged instead of immediately rebuilding
+        // the monitor's automatic Dwindle/Grid preset.
+        preserveCurrentSmoothWorkspaceTreeAfterUserCommand(target.workspace)
         return .succ
     }
 }

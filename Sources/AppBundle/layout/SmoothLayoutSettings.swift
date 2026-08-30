@@ -56,7 +56,14 @@ struct SmoothMonitorLayoutProfile: Codable, Equatable, Identifiable, Sendable {
 
     func style(for windowCount: Int) -> SmoothLayoutStyle {
         let index = min(max(windowCount, 1), Self.configuredWindowCount) - 1
-        return normalized.styles[index]
+        // SwiftUI can evaluate Picker bindings many times in a single render
+        // pass. Normalizing here copied the whole profile and revalidated every
+        // custom layout for each evaluation, which could trap the monitor
+        // settings window in an AttributeGraph update loop.
+        guard styles.indices.contains(index) else {
+            return styles.last ?? .dwindle
+        }
+        return styles[index]
     }
 
     func customLayout(for windowCount: Int) -> SmoothCustomLayoutBlueprint? {
@@ -218,6 +225,11 @@ final class SmoothLayoutSettingsStore: ObservableObject {
         profile.customLayouts[String(windowCount)] = layout
         profile.styles[index] = .manual
         profiles[monitorName] = profile
+        // Closing the editor generates window events that can cancel the
+        // settings refresh. Drop the cached topology first so the next refresh
+        // must apply the newly saved blueprint even when that initial task is
+        // superseded.
+        invalidateSmoothWorkspaceLayoutSnapshots()
         didChangeLayoutSettings()
     }
 
