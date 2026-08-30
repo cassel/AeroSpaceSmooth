@@ -29,6 +29,29 @@ final class ConfigTest: XCTestCase {
         assertEquals(result.warnings, [])
     }
 
+    func testLayoutAnimationConfig() {
+        let result = parseConfig(
+            """
+            layout-animation-duration-ms = 220
+            layout-animation-respect-reduce-motion = false
+            """,
+        )
+        assertEquals(result.errors, [])
+        assertEquals(result.config.layoutAnimationDurationMs, 220)
+        assertEquals(result.config.layoutAnimationRespectReduceMotion, false)
+    }
+
+    func testLayoutAnimationDurationOutOfBounds() {
+        let result = parseConfig(
+            """
+            layout-animation-duration-ms = 1001
+            """,
+        )
+        assertEquals(result.strErrors, [
+            "[ERROR] layout-animation-duration-ms: layout animation duration must be in [0, 1000] ms range",
+        ])
+    }
+
     func testConfigVersionOutOfBounds() {
         let result = parseConfig(
             """
