@@ -66,7 +66,7 @@ private enum VisualConfigDecodeError: LocalizedError {
     case invalidRoot
 
     var errorDescription: String? {
-        "O documento TOML não possui uma tabela raiz válida."
+        "The TOML document does not contain a valid root table."
     }
 }
 
@@ -517,7 +517,7 @@ final class VisualConfigSettingsStore: ObservableObject {
             draft = decoded
             status = .ready
         } catch {
-            status = .failed("Não foi possível carregar a configuração: \(error.localizedDescription)")
+            status = .failed("Could not load the configuration: \(error.localizedDescription)")
         }
     }
 
@@ -528,7 +528,7 @@ final class VisualConfigSettingsStore: ObservableObject {
 
     func save() async {
         guard let url = configFileUrl else {
-            status = .failed("Arquivo de configuração não encontrado.")
+            status = .failed("Configuration file not found.")
             return
         }
         status = .saving
@@ -547,10 +547,10 @@ final class VisualConfigSettingsStore: ObservableObject {
             }
             originalText = candidate
             originalDraft = draft
-            let warning = reload.stderr.isEmpty ? "Configuração salva e aplicada." : "Salva com avisos: \(reload.stderr)"
+            let warning = reload.stderr.isEmpty ? "Configuration saved and applied." : "Saved with warnings: \(reload.stderr)"
             status = .saved(warning)
         } catch {
-            status = .failed("Falha ao salvar: \(error.localizedDescription)")
+            status = .failed("Could not save: \(error.localizedDescription)")
         }
     }
 

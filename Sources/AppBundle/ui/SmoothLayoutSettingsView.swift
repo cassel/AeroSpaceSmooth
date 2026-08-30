@@ -51,12 +51,12 @@ private enum SmoothSettingsSection: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
             case .layouts: "Layouts"
-            case .general: "Geral"
+            case .general: "General"
             case .workspaces: "Workspaces"
-            case .applications: "Aplicativos"
-            case .automation: "Automação"
-            case .shortcuts: "Atalhos"
-            case .configFile: "Arquivo TOML"
+            case .applications: "Applications"
+            case .automation: "Automation"
+            case .shortcuts: "Shortcuts"
+            case .configFile: "TOML File"
         }
     }
 
@@ -120,55 +120,67 @@ private struct SmoothLayoutSettingsView: View {
 
     private var generalPage: some View {
         SettingsPage(
-            title: "Geral",
-            subtitle: "Inicialização, comportamento da árvore e opções padrão do AeroSpace.",
+            title: "General",
+            subtitle: "Startup, window-tree behavior and AeroSpace defaults.",
         ) {
-            SettingsCard("Aplicativo", systemImage: "gearshape.2") {
-                Picker("Versão da configuração", selection: $configSettings.draft.configVersion) {
+            SettingsCard(
+                "Application",
+                systemImage: "gearshape.2",
+                help: "Configuration version controls the TOML schema. Start at login launches AeroSpace automatically. Auto reload watches the TOML file and reloads external edits.",
+            ) {
+                Picker("Configuration version", selection: $configSettings.draft.configVersion) {
                     Text("1").tag(1)
                     Text("2").tag(2)
                 }
-                Toggle("Iniciar automaticamente no login", isOn: $configSettings.draft.startAtLogin)
-                Text("Neste Mac o startup principal é controlado pelo LaunchAgent. Mantenha esta opção desligada para evitar duas instâncias.")
+                Toggle("Start at login", isOn: $configSettings.draft.startAtLogin)
+                Text("Startup on this Mac is managed by a LaunchAgent. Keep this off to prevent duplicate instances.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Toggle("Recarregar o arquivo automaticamente", isOn: $configSettings.draft.autoReloadConfig)
+                Toggle("Automatically reload the configuration file", isOn: $configSettings.draft.autoReloadConfig)
             }
 
-            SettingsCard("Árvore de janelas", systemImage: "point.3.connected.trianglepath.dotted") {
-                Toggle("Achatar containers automaticamente", isOn: $configSettings.draft.flattenContainers)
+            SettingsCard(
+                "Window Tree",
+                systemImage: "point.3.connected.trianglepath.dotted",
+                help: "Flatten removes redundant nested containers. Opposite-orientation normalization alternates split directions. Root layout and orientation define new workspaces; accordion padding controls the visible edge of stacked accordion windows.",
+            ) {
+                Toggle("Automatically flatten containers", isOn: $configSettings.draft.flattenContainers)
                 Toggle(
-                    "Normalizar containers aninhados com orientação oposta",
+                    "Normalize nested containers with opposite orientations",
                     isOn: $configSettings.draft.normalizeOppositeOrientation,
                 )
-                Picker("Layout raiz padrão", selection: $configSettings.draft.defaultRootLayout) {
+                Picker("Default root layout", selection: $configSettings.draft.defaultRootLayout) {
                     Text("Tiles").tag("tiles")
                     Text("Accordion").tag("accordion")
                 }
-                Picker("Orientação raiz padrão", selection: $configSettings.draft.defaultRootOrientation) {
-                    Text("Automática").tag("auto")
+                Picker("Default root orientation", selection: $configSettings.draft.defaultRootOrientation) {
+                    Text("Automatic").tag("auto")
                     Text("Horizontal").tag("horizontal")
                     Text("Vertical").tag("vertical")
                 }
                 Stepper(
-                    "Padding do accordion: \(configSettings.draft.accordionPadding) px",
+                    "Accordion padding: \(configSettings.draft.accordionPadding) px",
                     value: $configSettings.draft.accordionPadding,
                     in: 0 ... 1000,
                 )
             }
 
-            SettingsCard("Animações", systemImage: "waveform.path") {
+            SettingsCard(
+                "Animations",
+                systemImage: "waveform.path",
+                help: "Duration controls how long a coordinated window reflow takes. Reduce Motion follows the macOS Accessibility preference. A duration of 0 disables layout animations.",
+            ) {
                 Stepper(
-                    "Duração: \(configSettings.draft.layoutAnimationDurationMs) ms",
+                    "Duration: \(configSettings.draft.layoutAnimationDurationMs) ms",
                     value: $configSettings.draft.layoutAnimationDurationMs,
                     in: 0 ... 1000,
                     step: 10,
                 )
                 Toggle(
-                    "Respeitar Reduzir Movimento do macOS",
+                    "Respect the macOS Reduce Motion setting",
                     isOn: $configSettings.draft.layoutAnimationRespectsReduceMotion,
                 )
-                Text("Use 0 ms para desativar a animação. O valor atual padrão é 160 ms.")
+                Text("Use 0 ms to disable animations. The current default is 160 ms.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -178,21 +190,33 @@ private struct SmoothLayoutSettingsView: View {
     private var workspacesPage: some View {
         SettingsPage(
             title: "Workspaces",
-            subtitle: "Defina os espaços persistentes, o monitor de cada um e os gaps.",
+            subtitle: "Define persistent workspaces, monitor assignments and gaps.",
         ) {
-            SettingsCard("Workspaces persistentes", systemImage: "square.grid.3x3") {
+            SettingsCard(
+                "Persistent Workspaces",
+                systemImage: "square.grid.3x3",
+                help: "Persistent workspaces exist even when they contain no windows, which keeps navigation and monitor assignments stable.",
+            ) {
                 StringListEditor(
                     items: $configSettings.draft.persistentWorkspaces,
-                    placeholder: "Nome do workspace",
-                    addTitle: "Adicionar workspace",
+                    placeholder: "Workspace name",
+                    addTitle: "Add Workspace",
                 )
             }
 
-            SettingsCard("Monitor por workspace", systemImage: "display.2") {
+            SettingsCard(
+                "Workspace Monitor Assignment",
+                systemImage: "display.2",
+                help: "Pins each workspace to one or more preferred monitors. Monitor names are evaluated in order, and the first connected match is used.",
+            ) {
                 WorkspaceAssignmentsEditor(assignments: $configSettings.draft.workspaceAssignments)
             }
 
-            SettingsCard("Gaps", systemImage: "rectangle.inset.filled") {
+            SettingsCard(
+                "Gaps",
+                systemImage: "rectangle.inset.filled",
+                help: "Inner gaps add space between tiled windows. Outer gaps reserve space between the tiling area and each screen edge.",
+            ) {
                 GapsEditor(gaps: $configSettings.draft.gaps)
             }
         }
@@ -200,10 +224,14 @@ private struct SmoothLayoutSettingsView: View {
 
     private var applicationsPage: some View {
         SettingsPage(
-            title: "Aplicativos",
-            subtitle: "Regras executadas quando uma nova janela é detectada.",
+            title: "Applications",
+            subtitle: "Rules that run when a new application window is detected.",
         ) {
-            SettingsCard("on-window-detected", systemImage: "arrowshape.turn.up.right.circle") {
+            SettingsCard(
+                "Window Detection Rules",
+                systemImage: "arrowshape.turn.up.right.circle",
+                help: "Each rule tests window properties such as bundle identifier or title, then runs one or more AeroSpace commands for matching windows.",
+            ) {
                 WindowRulesEditor(rules: $configSettings.draft.windowRules)
             }
         }
@@ -211,54 +239,74 @@ private struct SmoothLayoutSettingsView: View {
 
     private var automationPage: some View {
         SettingsPage(
-            title: "Automação",
-            subtitle: "Ambiente e comandos executados pelos eventos do AeroSpace.",
+            title: "Automation",
+            subtitle: "Environment variables and commands triggered by AeroSpace events.",
         ) {
-            SettingsCard("Ambiente de execução", systemImage: "terminal") {
+            SettingsCard(
+                "Execution Environment",
+                systemImage: "terminal",
+                help: "Inherited variables come from the AeroSpace process. Custom variables are added or overridden for commands executed by AeroSpace.",
+            ) {
                 Toggle(
-                    "Herdar variáveis do ambiente",
+                    "Inherit environment variables",
                     isOn: $configSettings.draft.inheritEnvironmentVariables,
                 )
                 KeyValueEditor(
                     pairs: $configSettings.draft.environmentVariables,
-                    keyPlaceholder: "VARIÁVEL",
-                    valuePlaceholder: "valor",
-                    addTitle: "Adicionar variável",
+                    keyPlaceholder: "VARIABLE",
+                    valuePlaceholder: "value",
+                    addTitle: "Add Variable",
                 )
             }
 
-            SettingsCard("Depois do login", systemImage: "person.crop.circle.badge.checkmark") {
-                Text("Opção mantida para compatibilidade; versões atuais esperam esta lista vazia.")
+            SettingsCard(
+                "After Login",
+                systemImage: "person.crop.circle.badge.checkmark",
+                help: "Legacy commands run after macOS login. Current AeroSpace versions keep this list empty; prefer After Startup for normal initialization.",
+            ) {
+                Text("This option is retained for compatibility; current versions expect this list to be empty.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 StringListEditor(
                     items: $configSettings.draft.afterLoginCommands,
-                    placeholder: "Comando",
-                    addTitle: "Adicionar comando",
+                    placeholder: "Command",
+                    addTitle: "Add Command",
                 )
             }
 
-            SettingsCard("Depois de iniciar", systemImage: "play.circle") {
+            SettingsCard(
+                "After Startup",
+                systemImage: "play.circle",
+                help: "Commands in this list run once after AeroSpace has started and loaded its configuration.",
+            ) {
                 StringListEditor(
                     items: $configSettings.draft.afterStartupCommands,
-                    placeholder: "Comando",
-                    addTitle: "Adicionar comando",
+                    placeholder: "Command",
+                    addTitle: "Add Command",
                 )
             }
 
-            SettingsCard("Ao trocar o monitor focado", systemImage: "arrow.left.arrow.right") {
+            SettingsCard(
+                "Focused Monitor Changed",
+                systemImage: "arrow.left.arrow.right",
+                help: "Runs after focus crosses to a different monitor. Use it for status bars or monitor-specific automation, not for workspace reassignment.",
+            ) {
                 StringListEditor(
                     items: $configSettings.draft.onFocusedMonitorChanged,
-                    placeholder: "Comando",
-                    addTitle: "Adicionar comando",
+                    placeholder: "Command",
+                    addTitle: "Add Command",
                 )
             }
 
-            SettingsCard("Ao trocar o foco", systemImage: "scope") {
+            SettingsCard(
+                "Focus Changed",
+                systemImage: "scope",
+                help: "Runs whenever the focused window or workspace changes. Keep these commands fast because the event may occur frequently.",
+            ) {
                 StringListEditor(
                     items: $configSettings.draft.onFocusChanged,
-                    placeholder: "Comando",
-                    addTitle: "Adicionar comando",
+                    placeholder: "Command",
+                    addTitle: "Add Command",
                 )
             }
         }
@@ -266,13 +314,21 @@ private struct SmoothLayoutSettingsView: View {
 
     private var shortcutsPage: some View {
         SettingsPage(
-            title: "Atalhos",
-            subtitle: "Todos os bindings dos modos main e service.",
+            title: "Shortcuts",
+            subtitle: "All key bindings from the main and service modes.",
         ) {
-            SettingsCard("Modo principal", systemImage: "keyboard") {
+            SettingsCard(
+                "Main Mode",
+                systemImage: "keyboard",
+                help: "Main-mode bindings are the shortcuts available during normal use. A binding can run one command or a command chain.",
+            ) {
                 HotkeyBindingsEditor(bindings: $configSettings.draft.mainBindings)
             }
-            SettingsCard("Modo de manutenção", systemImage: "wrench.and.screwdriver") {
+            SettingsCard(
+                "Service Mode",
+                systemImage: "wrench.and.screwdriver",
+                help: "Service-mode bindings are available only after entering that mode and are typically used for maintenance or recovery commands.",
+            ) {
                 HotkeyBindingsEditor(bindings: $configSettings.draft.serviceBindings)
             }
         }
@@ -280,16 +336,20 @@ private struct SmoothLayoutSettingsView: View {
 
     private var configFilePage: some View {
         SettingsPage(
-            title: "Arquivo TOML",
+            title: "TOML File",
             subtitle: configSettings.configPath,
         ) {
             HStack {
-                Button("Abrir no editor") { configSettings.openConfigFile() }
-                Button("Ler novamente") { configSettings.load() }
+                Button("Open in Editor") { configSettings.openConfigFile() }
+                Button("Reload from Disk") { configSettings.load() }
                 Spacer()
             }
 
-            SettingsCard("Prévia preservando comentários", systemImage: "doc.text.magnifyingglass") {
+            SettingsCard(
+                "Comment-Preserving Preview",
+                systemImage: "doc.text.magnifyingglass",
+                help: "Shows the exact TOML that will be saved. Existing comments and unrelated keys are preserved when visual settings are updated.",
+            ) {
                 ScrollView([.horizontal, .vertical]) {
                     Text(configSettings.previewText)
                         .font(.system(.caption, design: .monospaced))
@@ -308,13 +368,13 @@ private struct SmoothLayoutSettingsView: View {
             statusLabel
             Spacer()
             if selection == .layouts {
-                Text("Alterações de layout são aplicadas imediatamente.")
+                Text("Layout changes are applied immediately.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                Button("Descartar") { configSettings.discardChanges() }
+                Button("Discard") { configSettings.discardChanges() }
                     .disabled(!configSettings.hasChanges)
-                Button("Salvar e aplicar") {
+                Button("Save & Apply") {
                     Task.startUnstructured { await configSettings.save() }
                 }
                 .buttonStyle(.borderedProminent)
@@ -330,12 +390,12 @@ private struct SmoothLayoutSettingsView: View {
         switch configSettings.status {
             case .ready:
                 if configSettings.hasChanges {
-                    Label("Alterações não salvas", systemImage: "circle.fill")
+                    Label("Unsaved changes", systemImage: "circle.fill")
                         .foregroundStyle(.orange)
                 }
             case .saving:
                 ProgressView().controlSize(.small)
-                Text("Validando e salvando…")
+                Text("Validating and saving…")
             case .saved(let message):
                 Label(message, systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
@@ -372,11 +432,13 @@ private struct SettingsPage<Content: View>: View {
 private struct SettingsCard<Content: View>: View {
     let title: String
     let systemImage: String
+    let help: String
     @ViewBuilder let content: Content
 
-    init(_ title: String, systemImage: String, @ViewBuilder content: () -> Content) {
+    init(_ title: String, systemImage: String, help: String, @ViewBuilder content: () -> Content) {
         self.title = title
         self.systemImage = systemImage
+        self.help = help
         self.content = content()
     }
 
@@ -386,7 +448,41 @@ private struct SettingsCard<Content: View>: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(4)
         } label: {
-            Label(title, systemImage: systemImage).font(.headline)
+            HStack(spacing: 6) {
+                Label(title, systemImage: systemImage)
+                SettingInfoButton(title: title, message: help)
+            }
+            .font(.headline)
+        }
+    }
+}
+
+private struct SettingInfoButton: View {
+    let title: String
+    let message: String
+    @State private var isPresented = false
+
+    var body: some View {
+        Button {
+            isPresented.toggle()
+        } label: {
+            Image(systemName: "info.circle")
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .font(.body)
+        .help("About \(title)")
+        .accessibilityLabel("About \(title)")
+        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(title).font(.headline)
+                Text(message)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(14)
+            .frame(width: 320, alignment: .leading)
         }
     }
 }
@@ -439,7 +535,7 @@ private struct WorkspaceAssignmentsEditor: View {
                 HStack {
                     TextField("Workspace", text: $assignment.workspace).frame(width: 110)
                     TextField(
-                        "Monitores separados por vírgula",
+                        "Monitors separated by commas",
                         text: Binding(
                             get: { assignment.monitors.joined(separator: ", ") },
                             set: {
@@ -452,7 +548,7 @@ private struct WorkspaceAssignmentsEditor: View {
                     RemoveRowButton { assignments.removeAll { $0.id == assignment.id } }
                 }
             }
-            AddRowButton("Adicionar atribuição") {
+            AddRowButton("Add Assignment") {
                 assignments.append(VisualWorkspaceAssignment(workspace: "", monitors: ["main"]))
             }
         }
@@ -467,7 +563,7 @@ private struct WindowRulesEditor: View {
             ForEach($rules) { $rule in
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Text("Condição").frame(width: 70, alignment: .leading)
+                        Text("Condition").frame(width: 70, alignment: .leading)
                         TextField("test %{app-bundle-id} = …", text: $rule.condition)
                         RemoveRowButton { rules.removeAll { $0.id == rule.id } }
                     }
@@ -476,7 +572,7 @@ private struct WindowRulesEditor: View {
                 .padding(10)
                 .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 9))
             }
-            AddRowButton("Adicionar regra") {
+            AddRowButton("Add Rule") {
                 rules.append(VisualWindowRule(condition: "", commands: [""]))
             }
         }
@@ -498,7 +594,7 @@ private struct HotkeyBindingsEditor: View {
                 }
                 .padding(.vertical, 2)
             }
-            AddRowButton("Adicionar atalho") {
+            AddRowButton("Add Shortcut") {
                 bindings.append(VisualHotkeyBinding(shortcut: "", commands: [""]))
             }
         }
@@ -512,7 +608,7 @@ private struct CommandListEditor: View {
         VStack(spacing: 6) {
             ForEach(commands.indices, id: \.self) { index in
                 HStack {
-                    TextField("Comando", text: $commands[index])
+                    TextField("Command", text: $commands[index])
                         .font(.system(.body, design: .monospaced))
                     if commands.count > 1 {
                         RemoveRowButton { commands.remove(at: index) }
@@ -522,7 +618,7 @@ private struct CommandListEditor: View {
             Button {
                 commands.append("")
             } label: {
-                Label("Encadear comando", systemImage: "arrow.right")
+                Label("Chain Command", systemImage: "arrow.right")
             }
             .buttonStyle(.plain)
             .font(.caption)
@@ -538,16 +634,16 @@ private struct GapsEditor: View {
     var body: some View {
         Grid(alignment: .leading, horizontalSpacing: 22, verticalSpacing: 10) {
             GridRow {
-                gapStepper("Interno horizontal", value: $gaps.innerHorizontal)
-                gapStepper("Interno vertical", value: $gaps.innerVertical)
+                gapStepper("Inner horizontal", value: $gaps.innerHorizontal)
+                gapStepper("Inner vertical", value: $gaps.innerVertical)
             }
             GridRow {
-                gapStepper("Externo esquerdo", value: $gaps.outerLeft)
-                gapStepper("Externo direito", value: $gaps.outerRight)
+                gapStepper("Outer left", value: $gaps.outerLeft)
+                gapStepper("Outer right", value: $gaps.outerRight)
             }
             GridRow {
-                gapStepper("Externo superior", value: $gaps.outerTop)
-                gapStepper("Externo inferior", value: $gaps.outerBottom)
+                gapStepper("Outer top", value: $gaps.outerTop)
+                gapStepper("Outer bottom", value: $gaps.outerBottom)
             }
         }
     }
@@ -586,7 +682,7 @@ private struct RemoveRowButton: View {
                 .foregroundStyle(.secondary)
         }
         .buttonStyle(.plain)
-        .help("Remover")
+        .help("Remove")
     }
 }
 
@@ -621,7 +717,7 @@ private struct MonitorLayoutsSettingsPane: View {
                 VStack(spacing: 12) {
                     Image(systemName: "display.trianglebadge.exclamationmark")
                         .font(.largeTitle)
-                    Text("Nenhum monitor encontrado")
+                    Text("No monitors found")
                         .font(.headline)
                 }
                 .foregroundStyle(.secondary)
@@ -660,32 +756,42 @@ private struct MonitorLayoutsSettingsPane: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(monitor.name)
                             .font(.largeTitle.bold())
-                        Text("Escolha como este monitor organiza de 1 a 10 janelas.")
+                        Text("Choose how this monitor arranges from 1 to 10 windows.")
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Button("Restaurar padrão") {
+                    Button("Reset to Defaults") {
                         settings.resetProfile(monitorName: monitor.name, isHorizontal: monitor.isHorizontal)
                     }
                 }
 
-                Toggle(
-                    "Organização automática neste monitor",
-                    isOn: Binding(
-                        get: { profile.enabled },
-                        set: {
-                            settings.setEnabled(
-                                $0,
-                                monitorName: monitor.name,
-                                isHorizontal: monitor.isHorizontal,
-                            )
-                        },
-                    ),
-                )
-                .toggleStyle(.switch)
+                HStack {
+                    Toggle(
+                        "Automatic layout on this monitor",
+                        isOn: Binding(
+                            get: { profile.enabled },
+                            set: {
+                                settings.setEnabled(
+                                    $0,
+                                    monitorName: monitor.name,
+                                    isHorizontal: monitor.isHorizontal,
+                                )
+                            },
+                        ),
+                    )
+                    .toggleStyle(.switch)
+                    SettingInfoButton(
+                        title: "Automatic layout",
+                        message: "When enabled, AeroSpaceSmooth selects the layout configured for the current number of tiled windows on this monitor. Disable it to use standard AeroSpace behavior.",
+                    )
+                }
 
                 HStack {
-                    Text("Limite de janelas por workspace")
+                    Text("Window limit per workspace")
+                    SettingInfoButton(
+                        title: "Window limit per workspace",
+                        message: "When a workspace exceeds this number of tiled windows, overflow windows move to another workspace assigned to the same monitor.",
+                    )
                     Spacer()
                     Stepper(
                         "\(profile.tileLimit)",
@@ -702,8 +808,8 @@ private struct MonitorLayoutsSettingsPane: View {
                         in: 1 ... SmoothMonitorLayoutProfile.configuredWindowCount,
                     )
                     .frame(width: 110)
+                    .disabled(!profile.enabled)
                 }
-                .disabled(!profile.enabled)
 
                 LazyVGrid(
                     columns: [GridItem(.adaptive(minimum: 300), spacing: 14)],
@@ -732,11 +838,15 @@ private struct MonitorLayoutsSettingsPane: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("\(count) \(count == 1 ? "janela" : "janelas")")
+                Text("\(count) \(count == 1 ? "window" : "windows")")
                     .font(.headline)
+                SettingInfoButton(
+                    title: "\(count)-window layout",
+                    message: style.detail + " This selection applies only to this monitor when exactly \(count) tiled \(count == 1 ? "window is" : "windows are") present.",
+                )
                 Spacer()
                 Picker(
-                    "Estilo",
+                    "Style",
                     selection: Binding(
                         get: { style },
                         set: {
@@ -771,8 +881,7 @@ private struct MonitorLayoutsSettingsPane: View {
         }
         .padding(14)
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .opacity(enabled ? 1 : 0.45)
-        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.7)
     }
 }
 
@@ -804,7 +913,7 @@ private struct SmoothLayoutPreview: View {
                     VStack(spacing: 6) {
                         Image(systemName: "hand.draw")
                             .font(.title2)
-                        Text("Você organiza")
+                        Text("Manual layout")
                             .font(.caption.bold())
                     }
                     .foregroundStyle(.white.opacity(0.9))
@@ -839,7 +948,7 @@ private struct SmoothLayoutPreview: View {
                 }
             }
         }
-        .accessibilityLabel("Prévia de \(style.title) com \(windowCount) janelas")
+        .accessibilityLabel("Preview of \(style.title) with \(windowCount) windows")
     }
 }
 

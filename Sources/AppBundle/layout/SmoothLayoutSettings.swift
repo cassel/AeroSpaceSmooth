@@ -15,24 +15,24 @@ enum SmoothLayoutStyle: String, Codable, CaseIterable, Identifiable, Sendable {
     var title: String {
         switch self {
             case .manual: "Manual"
-            case .fullscreen: "Maximizada"
-            case .columns: "Colunas"
-            case .rows: "Linhas"
+            case .fullscreen: "Fullscreen"
+            case .columns: "Columns"
+            case .rows: "Rows"
             case .dwindle: "Dwindle"
-            case .verticalPairs: "Pares verticais"
-            case .grid: "Grade"
+            case .verticalPairs: "Vertical Pairs"
+            case .grid: "Grid"
         }
     }
 
     var detail: String {
         switch self {
-            case .manual: "O Smooth preserva a árvore atual para você mover e redimensionar livremente."
-            case .fullscreen: "Uma janela ocupa toda a area util."
-            case .columns: "Janelas lado a lado com larguras iguais."
-            case .rows: "Janelas empilhadas com alturas iguais."
-            case .dwindle: "Janela principal grande e cauda alternando direita e baixo."
-            case .verticalPairs: "Linhas empilhadas, com ate duas janelas por linha."
-            case .grid: "Grade balanceada de linhas e colunas."
+            case .manual: "Stops automatic rebuilding so you can move and resize the current tree."
+            case .fullscreen: "One window fills the entire usable area."
+            case .columns: "Windows appear side by side with equal widths."
+            case .rows: "Windows are stacked with equal heights."
+            case .dwindle: "A large primary window with a tail alternating right and down."
+            case .verticalPairs: "Stacked rows containing up to two windows each."
+            case .grid: "A balanced grid of rows and columns."
         }
     }
 
