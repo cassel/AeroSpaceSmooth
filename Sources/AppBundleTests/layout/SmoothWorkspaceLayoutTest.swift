@@ -182,20 +182,35 @@ final class SmoothWorkspaceLayoutTest: XCTestCase {
         }
     }
 
-    func testBottomEdgeHideOriginDoesNotLeakIntoSideBySideMonitors() {
+    func testAdaptiveHideUsesBottomEdgeWhenBothCornersLeakIntoSideMonitors() {
         let macBook = Rect(topLeftX: 0, topLeftY: 0, width: 1512, height: 982)
-        let origin = bottomEdgeHideOrigin(
+        let ultra = Rect(topLeftX: 1512, topLeftY: -523, width: 3780, height: 2160)
+        let vertical = Rect(topLeftX: -1296, topLeftY: -594, width: 1296, height: 2304)
+        let origin = adaptiveHideOrigin(
             monitorRect: macBook,
+            screenRects: [macBook, ultra, vertical],
             windowSize: CGSize(width: 935, height: 600),
         )
         let hiddenWindow = CGRect(origin: origin, size: CGSize(width: 935, height: 600))
-        let ultra = CGRect(x: 1512, y: -523, width: 3780, height: 2160)
-        let vertical = CGRect(x: -1296, y: -594, width: 1296, height: 2304)
+        let ultraFrame = CGRect(x: 1512, y: -523, width: 3780, height: 2160)
+        let verticalFrame = CGRect(x: -1296, y: -594, width: 1296, height: 2304)
 
         assertEquals(origin, CGPoint(x: 288.5, y: 981))
         assertTrue(hiddenWindow.intersection(CGRect(x: 0, y: 0, width: 1512, height: 982)).height <= 1)
-        assertTrue(hiddenWindow.intersection(ultra).isNull)
-        assertTrue(hiddenWindow.intersection(vertical).isNull)
+        assertTrue(hiddenWindow.intersection(ultraFrame).isNull)
+        assertTrue(hiddenWindow.intersection(verticalFrame).isNull)
+    }
+
+    func testAdaptiveHideUsesCornerOnSingleMonitor() {
+        let macBook = Rect(topLeftX: 0, topLeftY: 0, width: 1800, height: 1169)
+
+        let origin = adaptiveHideOrigin(
+            monitorRect: macBook,
+            screenRects: [macBook],
+            windowSize: CGSize(width: 888, height: 1060),
+        )
+
+        assertEquals(origin, CGPoint(x: 1799, y: 1168))
     }
 
     private func enableStyle(_ style: SmoothLayoutStyle) {

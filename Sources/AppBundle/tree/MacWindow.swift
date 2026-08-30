@@ -157,6 +157,14 @@ final class MacWindow: Window {
                     windowSize: size,
                     edgeInset: macApp.appId == .zoom ? 0 : 1,
                 )
+            case .adaptive:
+                guard let size = try await getAxSize(.cancellable) else { return }
+                p = adaptiveHideOrigin(
+                    monitorRect: nodeMonitor.visibleRect,
+                    screenRects: monitorInfos.map(\.visibleRect),
+                    windowSize: size,
+                    edgeInset: macApp.appId == .zoom ? 0 : 1,
+                )
         }
         setAxFrame(p, nil)
     }
@@ -213,6 +221,33 @@ func bottomEdgeHideOrigin(monitorRect: Rect, windowSize: CGSize, edgeInset: CGFl
         x: centeredX.coerce(in: monitorRect.minX ... maximumX),
         y: monitorRect.maxY - edgeInset,
     )
+}
+
+func adaptiveHideOrigin(
+    monitorRect: Rect,
+    screenRects: [Rect],
+    windowSize: CGSize,
+    edgeInset: CGFloat = 1,
+) -> CGPoint {
+    let candidates = [
+        monitorRect.bottomRightCorner - CGPoint(x: edgeInset, y: edgeInset),
+        monitorRect.bottomLeftCorner + CGPoint(x: -windowSize.width + edgeInset, y: -edgeInset),
+        bottomEdgeHideOrigin(monitorRect: monitorRect, windowSize: windowSize, edgeInset: edgeInset),
+    ]
+    return candidates.min { lhs, rhs in
+        visibleArea(of: lhs, windowSize: windowSize, on: screenRects) <
+            visibleArea(of: rhs, windowSize: windowSize, on: screenRects)
+    }.orDie()
+}
+
+private func visibleArea(of origin: CGPoint, windowSize: CGSize, on screenRects: [Rect]) -> CGFloat {
+    let windowMaxX = origin.x + windowSize.width
+    let windowMaxY = origin.y + windowSize.height
+    return screenRects.reduce(0) { result, screen in
+        let width = max(0, min(windowMaxX, screen.maxX) - max(origin.x, screen.minX))
+        let height = max(0, min(windowMaxY, screen.maxY) - max(origin.y, screen.minY))
+        return result + width * height
+    }
 }
 
 extension Window {

@@ -153,6 +153,7 @@ func refreshObs(_: AXObserver, _: AXUIElement, notif: CFString, _: UnsafeMutable
 enum OptimalHideCorner {
     case bottomLeftCorner, bottomRightCorner
     case bottomEdge
+    case adaptive
 }
 
 @MainActor
@@ -176,10 +177,10 @@ private func layoutWorkspaces() async throws {
     LayoutAnimator.shared.apply(transaction)
     for workspace in Workspace.all where !workspace.isVisible {
         for window in workspace.allLeafWindowsRecursive {
-            // Left/right edges can touch neighboring displays. The bottom edge
-            // keeps the AX anchor inside the source monitor (so macOS accepts
-            // it) while extending the inactive window into empty space below.
-            try await (window as! MacWindow).hideInCorner(.bottomEdge) // todo as!
+            // Pick the least visible hiding point for the current display
+            // arrangement. A corner is best on one monitor; a bottom edge can
+            // be safer when both side corners touch neighboring displays.
+            try await (window as! MacWindow).hideInCorner(.adaptive) // todo as!
         }
     }
 }
