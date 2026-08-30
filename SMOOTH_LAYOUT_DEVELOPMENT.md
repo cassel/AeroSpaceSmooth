@@ -32,6 +32,15 @@ The settings are stored by monitor name in the app preferences. A workspace
 with one tiled window is always maximized. Manual resizing is preserved until
 the workspace membership, window order, selected style, or monitor changes.
 
+## Visual configuration
+
+The same Settings window also exposes the active TOML configuration in visual
+sections for general behavior, workspaces and monitor assignments, gaps,
+application rules, automation commands, environment variables, and hotkeys.
+Edits are validated with AeroSpace's real config parser before the file is
+atomically saved and reloaded. The editor patches only changed values so
+comments, ordering, and unknown advanced options remain intact.
+
 ## Configuration
 
 ```toml
