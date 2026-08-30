@@ -1,29 +1,30 @@
 import AppKit
 import Common
 
+private indirect enum SmoothTreeShape: Equatable {
+    case window
+    case container(isHorizontal: Bool, isTiles: Bool, children: [SmoothTreeShape])
+}
+
 private struct SmoothWorkspaceLayoutSnapshot {
     let monitorName: String
     let monitorIsHorizontal: Bool
     let style: SmoothLayoutStyle
     let windowIds: [UInt32]
-
-    func matches(_ other: SmoothWorkspaceLayoutSnapshot) -> Bool {
-        monitorName == other.monitorName &&
-            monitorIsHorizontal == other.monitorIsHorizontal &&
-            style == other.style &&
-            windowIds == other.windowIds
-    }
+    let treeShape: SmoothTreeShape
 
     func canReuseLayout(
         monitorName: String,
         monitorIsHorizontal: Bool,
         style: SmoothLayoutStyle,
         windowIds: [UInt32],
+        treeShape: SmoothTreeShape,
     ) -> Bool {
         self.monitorName == monitorName &&
             self.monitorIsHorizontal == monitorIsHorizontal &&
             self.style == style &&
-            self.windowIds.toSet() == windowIds.toSet()
+            self.windowIds.toSet() == windowIds.toSet() &&
+            self.treeShape == treeShape
     }
 }
 
@@ -68,6 +69,7 @@ func reconcileSmoothWorkspaceLayouts() {
         let previous = smoothWorkspaceLayoutSnapshots[workspace.name]
         let currentWindowIds = currentWindows.map(\.windowId)
         let monitorIsHorizontal = monitor.width >= monitor.height
+        let currentTreeShape = smoothTreeShape(root)
 
         // A swap, focus change, or manual resize must not trigger a complete
         // rebuild. Besides feeling abrupt, rebuilding in response to AX events
@@ -78,27 +80,44 @@ func reconcileSmoothWorkspaceLayouts() {
             monitorIsHorizontal: monitorIsHorizontal,
             style: style,
             windowIds: currentWindowIds,
+            treeShape: currentTreeShape,
         ) == true {
             smoothWorkspaceLayoutSnapshots[workspace.name] = SmoothWorkspaceLayoutSnapshot(
                 monitorName: monitor.name,
                 monitorIsHorizontal: monitorIsHorizontal,
                 style: style,
                 windowIds: currentWindowIds,
+                treeShape: currentTreeShape,
             )
             continue
         }
 
         let orderedWindows = orderWindows(currentWindows, preserving: previous)
-        let snapshot = SmoothWorkspaceLayoutSnapshot(
+        workspace.applySmoothLayout(style, to: orderedWindows, monitor: monitor)
+        smoothWorkspaceLayoutSnapshots[workspace.name] = SmoothWorkspaceLayoutSnapshot(
             monitorName: monitor.name,
             monitorIsHorizontal: monitorIsHorizontal,
             style: style,
             windowIds: orderedWindows.map(\.windowId),
+            treeShape: smoothTreeShape(root),
         )
+    }
+}
 
-        guard previous?.matches(snapshot) != true else { continue }
-        workspace.applySmoothLayout(style, to: orderedWindows, monitor: monitor)
-        smoothWorkspaceLayoutSnapshots[workspace.name] = snapshot
+private func smoothTreeShape(_ node: TreeNode) -> SmoothTreeShape {
+    switch node.nodeCases {
+        case .window:
+            .window
+        case .tilingContainer(let container):
+            .container(
+                isHorizontal: container.orientation == .h,
+                isTiles: container.layout == .tiles,
+                children: container.children.map(smoothTreeShape),
+            )
+        case .workspace, .macosMinimizedWindowsContainer,
+             .macosHiddenAppsWindowsContainer, .macosFullscreenWindowsContainer,
+             .macosPopupWindowsContainer, .floatingWindowsContainer:
+            dieT("Smooth layout shape only supports tiling trees")
     }
 }
 

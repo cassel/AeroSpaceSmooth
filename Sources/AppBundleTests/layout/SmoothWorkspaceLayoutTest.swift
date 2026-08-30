@@ -76,17 +76,34 @@ final class SmoothWorkspaceLayoutTest: XCTestCase {
         )
     }
 
-    func testSameMembershipDoesNotRebuildAfterManualTreeChange() {
+    func testSameMembershipRebuildsMalformedTree() {
+        enableStyle(.dwindle)
+        let root = Workspace.get(byName: name).rootTilingContainer
+        let windows = (1 ... 4).map { TestWindow.new(id: UInt32($0), parent: root) }
+        reconcileSmoothWorkspaceLayouts()
+
+        windows[0].bind(to: root, adaptiveWeight: WEIGHT_AUTO, index: INDEX_BIND_LAST)
+        reconcileSmoothWorkspaceLayouts()
+
+        assertEquals(
+            root.layoutDescription,
+            expectedDwindle([1, 2, 3, 4], orientationIsHorizontal: true),
+        )
+    }
+
+    func testSameShapePreservesManualWindowOrder() {
         enableStyle(.dwindle)
         let root = Workspace.get(byName: name).rootTilingContainer
         let windows = (1 ... 4).map { TestWindow.new(id: UInt32($0), parent: root) }
         reconcileSmoothWorkspaceLayouts()
         let originalTail = root.children[1]
+        let deepestParent = windows[2].parent.orDie()
 
-        windows[0].bind(to: root, adaptiveWeight: WEIGHT_AUTO, index: INDEX_BIND_LAST)
+        windows[2].bind(to: deepestParent, adaptiveWeight: WEIGHT_AUTO, index: INDEX_BIND_LAST)
         reconcileSmoothWorkspaceLayouts()
 
         assertTrue(root.children.contains { $0 === originalTail })
+        assertEquals(root.allLeafWindowsRecursive.map(\.windowId), [1, 2, 4, 3])
     }
 
     func testMonitorLimitMovesOverflowToAnotherWorkspaceOnSameMonitor() {
