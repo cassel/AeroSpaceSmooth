@@ -17,6 +17,15 @@ let projectRoot: URL = {
 func setUpWorkspacesForTests() {
     config = defaultConfig
     configUrl = defaultConfigUrl
+    invalidateSmoothWorkspaceLayoutSnapshots()
+    SmoothLayoutSettingsStore.shared.replaceProfilesForTests([
+        "Test Monitor": SmoothMonitorLayoutProfile(
+            monitorName: "Test Monitor",
+            enabled: false,
+            tileLimit: 10,
+            styles: Array(repeating: .dwindle, count: SmoothMonitorLayoutProfile.configuredWindowCount),
+        ),
+    ])
     config.enableNormalizationFlattenContainers = false // Make layout tests more predictable
     config.enableNormalizationOppositeOrientationForNestedContainers = false // Make layout tests more predictable
     config.defaultRootContainerOrientation = .horizontal // Make default layout predictable

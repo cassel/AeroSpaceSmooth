@@ -12,6 +12,25 @@ window-by-window layout writes with a single layout transaction.
 - Ignore duplicate refreshes that have the same target frames.
 - Apply cross-monitor and workspace transitions immediately.
 - Respect the macOS Reduce Motion preference.
+- Rebuild workspace trees natively when windows open, close, or move.
+- Keep independent layout profiles for each physical monitor.
+- Choose a layout for every window count from 1 through 10.
+- Enforce a configurable tile limit per monitor and move overflow to the next
+  workspace assigned to that monitor.
+
+## Monitor layout profiles
+
+Open the AeroSpace Smooth menu and choose **Configurar layouts por monitor…**
+(`Command+Shift+L`). Each detected display has its own profile with:
+
+- An enable switch for native automatic organization.
+- A tile limit from 1 through 10.
+- A visual layout selector for each window count from 1 through 10.
+- Built-in presets for horizontal and vertical monitors.
+
+The settings are stored by monitor name in the app preferences. A workspace
+with one tiled window is always maximized. Manual resizing is preserved until
+the workspace membership, window order, selected style, or monitor changes.
 
 ## Configuration
 

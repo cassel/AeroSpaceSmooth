@@ -13,6 +13,8 @@ public func menuBar(viewModel: TrayMenuModel) -> some Scene { // todo should it 
         Divider()
 
         if viewModel.axPermissionStatus == .granted {
+            OpenSmoothLayoutSettingsButton()
+            Divider()
             if let token: RunSessionGuard = .isServerEnabled, viewModel.lastReloadConfigContainedWarnings {
                 Button {
                     Task.startUnstructured {

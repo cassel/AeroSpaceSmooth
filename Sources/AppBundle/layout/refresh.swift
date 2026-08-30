@@ -45,6 +45,7 @@ func runHeavyCompleteRefreshSession(
             updateTrayText()
             SecureInputPanel.shared.refresh()
             try await normalizeLayoutReason()
+            reconcileSmoothWorkspaceLayouts()
             if shouldLayoutWorkspaces { try await layoutWorkspaces() }
         }
     }
@@ -116,6 +117,7 @@ func refreshModel_nonCancellable() async {
         Workspace.garbageCollectUnusedWorkspaces()
         await checkOnFocusChangedCallbacks_nonCancellable()
         normalizeContainers()
+        reconcileSmoothWorkspaceLayouts()
     }
 }
 

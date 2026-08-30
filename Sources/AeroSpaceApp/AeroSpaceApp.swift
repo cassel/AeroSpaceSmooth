@@ -15,6 +15,7 @@ struct AeroSpaceApp: App {
 
     var body: some Scene {
         menuBar(viewModel: viewModel)
+        smoothLayoutSettingsWindow()
         getMessageWindow(messageModel: messageModel)
             .onChange(of: messageModel.message) { message in
                 if message != nil {
