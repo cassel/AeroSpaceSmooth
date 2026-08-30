@@ -213,6 +213,19 @@ final class SmoothWorkspaceLayoutTest: XCTestCase {
         assertEquals(origin, CGPoint(x: 1799, y: 1168))
     }
 
+    func testWindowConstraintViolationAllowsSmallRoundingDifferences() {
+        let target = Rect(topLeftX: 0, topLeftY: 0, width: 460, height: 520)
+
+        assertFalse(smoothWindowExceedsTile(
+            actual: Rect(topLeftX: 0, topLeftY: 0, width: 467, height: 528),
+            target: target,
+        ))
+        assertTrue(smoothWindowExceedsTile(
+            actual: Rect(topLeftX: 0, topLeftY: 0, width: 800, height: 600),
+            target: target,
+        ))
+    }
+
     private func enableStyle(_ style: SmoothLayoutStyle) {
         SmoothLayoutSettingsStore.shared.replaceProfilesForTests(["Test Monitor": profile(style: style)])
     }

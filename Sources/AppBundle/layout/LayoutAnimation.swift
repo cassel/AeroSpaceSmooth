@@ -37,6 +37,8 @@ final class LayoutAnimator {
 
     private init() {}
 
+    var isAnimating: Bool { animationTask != nil }
+
     func apply(_ transaction: LayoutTransaction, animated: Bool = true) {
         let targets = transaction.targets
         guard !targets.isEmpty else {

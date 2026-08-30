@@ -13,6 +13,7 @@ private struct SmoothWorkspaceLayoutSnapshot {
     let customLayout: SmoothCustomLayoutBlueprint?
     let windowIds: [UInt32]
     let treeShape: SmoothTreeShape
+    let usesConstraintFallback: Bool
 
     func canReuseLayout(
         monitorName: String,
@@ -49,6 +50,17 @@ func invalidateSmoothWorkspaceLayoutSnapshot(workspaceName: String) {
 
 @MainActor
 func reconcileSmoothWorkspaceLayouts() {
+    reconcileSmoothWorkspaceLayouts(constraintFallbackWorkspaces: [])
+}
+
+@MainActor
+func reconcileSmoothWorkspaceLayoutsRespectingWindowConstraints() async {
+    let fallbackWorkspaces = await smoothConstraintFallbackWorkspaces()
+    reconcileSmoothWorkspaceLayouts(constraintFallbackWorkspaces: fallbackWorkspaces)
+}
+
+@MainActor
+private func reconcileSmoothWorkspaceLayouts(constraintFallbackWorkspaces: Set<String>) {
     guard !isReconcilingSmoothWorkspaceLayouts else { return }
     isReconcilingSmoothWorkspaceLayouts = true
     defer { isReconcilingSmoothWorkspaceLayouts = false }
@@ -93,6 +105,22 @@ func reconcileSmoothWorkspaceLayouts() {
                 customLayout: nil,
                 windowIds: currentWindowIds,
                 treeShape: currentTreeShape,
+                usesConstraintFallback: false,
+            )
+            continue
+        }
+
+        if constraintFallbackWorkspaces.contains(workspace.name) {
+            let orderedWindows = orderWindows(currentWindows, preserving: previous)
+            workspace.applySmoothLayout(.grid, to: orderedWindows, monitor: monitor)
+            smoothWorkspaceLayoutSnapshots[workspace.name] = SmoothWorkspaceLayoutSnapshot(
+                monitorName: monitor.name,
+                monitorIsHorizontal: monitorIsHorizontal,
+                style: style,
+                customLayout: customLayout,
+                windowIds: orderedWindows.map(\.windowId),
+                treeShape: smoothTreeShape(root),
+                usesConstraintFallback: true,
             )
             continue
         }
@@ -116,6 +144,7 @@ func reconcileSmoothWorkspaceLayouts() {
                 customLayout: customLayout,
                 windowIds: currentWindowIds,
                 treeShape: currentTreeShape,
+                usesConstraintFallback: previous?.usesConstraintFallback ?? false,
             )
             continue
         }
@@ -133,8 +162,53 @@ func reconcileSmoothWorkspaceLayouts() {
             customLayout: customLayout,
             windowIds: orderedWindows.map(\.windowId),
             treeShape: smoothTreeShape(root),
+            usesConstraintFallback: false,
         )
     }
+}
+
+@MainActor
+private func smoothConstraintFallbackWorkspaces() async -> Set<String> {
+    guard !LayoutAnimator.shared.isAnimating else { return [] }
+    var result: Set<String> = []
+
+    for workspace in Workspace.all where workspace.isVisible {
+        let windows = workspace.rootTilingContainer.allLeafWindowsRecursive
+        guard !windows.isEmpty,
+              let previous = smoothWorkspaceLayoutSnapshots[workspace.name],
+              !previous.usesConstraintFallback
+        else { continue }
+
+        let monitor = workspace.workspaceMonitor
+        let profile = SmoothLayoutSettingsStore.shared.profile(for: monitor)
+        guard profile.enabled else { continue }
+        let style = profile.style(for: windows.count)
+        let customLayout = style == .manual ? profile.customLayout(for: windows.count) : nil
+        guard previous.canReuseLayout(
+            monitorName: monitor.name,
+            monitorIsHorizontal: monitor.width >= monitor.height,
+            style: style,
+            customLayout: customLayout,
+            windowIds: windows.map(\.windowId),
+            treeShape: smoothTreeShape(workspace.rootTilingContainer),
+        ) else { continue }
+
+        for window in windows {
+            guard let target = window.lastAppliedLayoutPhysicalRect,
+                  let macWindow = window as? MacWindow,
+                  let actual = try? await macWindow.getAxRect(.cancellable)
+            else { continue }
+            if smoothWindowExceedsTile(actual: actual, target: target) {
+                result.insert(workspace.name)
+                break
+            }
+        }
+    }
+    return result
+}
+
+func smoothWindowExceedsTile(actual: Rect, target: Rect, tolerance: CGFloat = 8) -> Bool {
+    actual.width > target.width + tolerance || actual.height > target.height + tolerance
 }
 
 private func smoothTreeShape(_ node: TreeNode) -> SmoothTreeShape {
