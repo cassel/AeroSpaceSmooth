@@ -1,5 +1,7 @@
 # ASS-002 — Versioned custom layout model
 
+**Status:** Functional MVP complete; import/export and future-schema recovery remain.
+
 ## Goal
 
 Represent a user-designed layout as a validated native tiling tree that can be

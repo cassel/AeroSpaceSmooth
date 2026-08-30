@@ -1,5 +1,7 @@
 # ASS-004 — Custom layout runtime
 
+**Status:** Functional MVP complete; extended command stress testing remains.
+
 ## Goal
 
 Apply a saved custom blueprint through the native AeroSpace tiling tree with the

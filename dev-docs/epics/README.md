@@ -21,10 +21,10 @@ in the repository until a writable fork remote and project board are connected.
 | Epic | Outcome | Depends on | Status |
 | --- | --- | --- | --- |
 | [ASS-001](ASS-001-settings-experience.md) | English Settings and contextual help | — | Complete |
-| [ASS-002](ASS-002-custom-layout-model.md) | Versioned custom-layout data model | ASS-001 | Ready |
-| [ASS-003](ASS-003-custom-layout-editor.md) | Visual editor inside Settings | ASS-002 | Planned |
-| [ASS-004](ASS-004-custom-layout-runtime.md) | Reliable runtime application | ASS-002 | Planned |
-| [ASS-005](ASS-005-reliability-and-release.md) | Regression, migration and release safety | ASS-003, ASS-004 | Planned |
+| [ASS-002](ASS-002-custom-layout-model.md) | Versioned custom-layout data model | ASS-001 | MVP complete |
+| [ASS-003](ASS-003-custom-layout-editor.md) | Visual editor inside Settings | ASS-002 | MVP complete |
+| [ASS-004](ASS-004-custom-layout-runtime.md) | Reliable runtime application | ASS-002 | MVP complete |
+| [ASS-005](ASS-005-reliability-and-release.md) | Regression, migration and release safety | ASS-003, ASS-004 | In progress |
 
 ASS-003 and ASS-004 can proceed in parallel after the model in ASS-002 is
 stable. ASS-005 is the release gate.

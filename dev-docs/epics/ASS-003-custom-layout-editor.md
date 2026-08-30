@@ -1,5 +1,7 @@
 # ASS-003 — Visual custom layout editor
 
+**Status:** Functional MVP complete; direct drag-and-drop topology editing remains.
+
 ## Goal
 
 Let a user arrange the exact layout for a selected monitor and window count

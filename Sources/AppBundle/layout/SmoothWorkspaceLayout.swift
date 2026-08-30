@@ -10,6 +10,7 @@ private struct SmoothWorkspaceLayoutSnapshot {
     let monitorName: String
     let monitorIsHorizontal: Bool
     let style: SmoothLayoutStyle
+    let customLayout: SmoothCustomLayoutBlueprint?
     let windowIds: [UInt32]
     let treeShape: SmoothTreeShape
 
@@ -17,12 +18,14 @@ private struct SmoothWorkspaceLayoutSnapshot {
         monitorName: String,
         monitorIsHorizontal: Bool,
         style: SmoothLayoutStyle,
+        customLayout: SmoothCustomLayoutBlueprint?,
         windowIds: [UInt32],
         treeShape: SmoothTreeShape,
     ) -> Bool {
         self.monitorName == monitorName &&
             self.monitorIsHorizontal == monitorIsHorizontal &&
             self.style == style &&
+            self.customLayout == customLayout &&
             self.windowIds.toSet() == windowIds.toSet() &&
             self.treeShape == treeShape
     }
@@ -66,16 +69,15 @@ func reconcileSmoothWorkspaceLayouts() {
         }
 
         let style = profile.style(for: currentWindows.count)
+        let customLayout = style == .manual ? profile.customLayout(for: currentWindows.count) : nil
         let previous = smoothWorkspaceLayoutSnapshots[workspace.name]
         let currentWindowIds = currentWindows.map(\.windowId)
         let monitorIsHorizontal = monitor.width >= monitor.height
         let currentTreeShape = smoothTreeShape(root)
 
-        // Manual is intentionally a no-op layout. Preserve the exact tree,
-        // order and weights produced by move/resize commands. When leaving the
-        // one-window automatic layout, release its synthetic fullscreen once;
-        // fullscreen toggled later by the user remains untouched.
-        if style == .manual {
+        // Profiles created before the visual Custom editor have no blueprint.
+        // Preserve their original manual/no-op behavior until a design is saved.
+        if style == .manual, customLayout == nil {
             if let previous, previous.style != .manual, previous.windowIds.count == 1 {
                 for window in currentWindows { window.isFullscreen = false }
             }
@@ -83,6 +85,7 @@ func reconcileSmoothWorkspaceLayouts() {
                 monitorName: monitor.name,
                 monitorIsHorizontal: monitorIsHorizontal,
                 style: style,
+                customLayout: nil,
                 windowIds: currentWindowIds,
                 treeShape: currentTreeShape,
             )
@@ -97,6 +100,7 @@ func reconcileSmoothWorkspaceLayouts() {
             monitorName: monitor.name,
             monitorIsHorizontal: monitorIsHorizontal,
             style: style,
+            customLayout: customLayout,
             windowIds: currentWindowIds,
             treeShape: currentTreeShape,
         ) == true {
@@ -104,6 +108,7 @@ func reconcileSmoothWorkspaceLayouts() {
                 monitorName: monitor.name,
                 monitorIsHorizontal: monitorIsHorizontal,
                 style: style,
+                customLayout: customLayout,
                 windowIds: currentWindowIds,
                 treeShape: currentTreeShape,
             )
@@ -111,11 +116,16 @@ func reconcileSmoothWorkspaceLayouts() {
         }
 
         let orderedWindows = orderWindows(currentWindows, preserving: previous)
-        workspace.applySmoothLayout(style, to: orderedWindows, monitor: monitor)
+        if let customLayout {
+            workspace.applySmoothCustomLayout(customLayout, to: orderedWindows, monitor: monitor)
+        } else {
+            workspace.applySmoothLayout(style, to: orderedWindows, monitor: monitor)
+        }
         smoothWorkspaceLayoutSnapshots[workspace.name] = SmoothWorkspaceLayoutSnapshot(
             monitorName: monitor.name,
             monitorIsHorizontal: monitorIsHorizontal,
             style: style,
+            customLayout: customLayout,
             windowIds: orderedWindows.map(\.windowId),
             treeShape: smoothTreeShape(root),
         )
@@ -196,6 +206,38 @@ private func orderWindows(
 
 extension Workspace {
     @MainActor
+    fileprivate func applySmoothCustomLayout(
+        _ blueprint: SmoothCustomLayoutBlueprint,
+        to windows: [Window],
+        monitor: MonitorInfo,
+    ) {
+        guard blueprint.windowCount == windows.count, blueprint.isValid, !windows.isEmpty else { return }
+
+        let root = rootTilingContainer
+        let previouslyFocusedWindow = focus.windowOrNil?.takeIf { windows.contains($0) }
+        for window in windows where window.isBound {
+            window.unbindFromParent()
+        }
+        for child in root.children {
+            child.unbindFromParent()
+        }
+        for window in windows { window.isFullscreen = false }
+
+        switch blueprint.root {
+            case .window(let slot):
+                configureRoot(root, orientation: monitor.width >= monitor.height ? .h : .v)
+                bindSmoothWindow(windows[slot], to: root, weight: 1)
+                windows[slot].isFullscreen = true
+            case .split(let axis, let ratio, let first, let second):
+                configureRoot(root, orientation: axis.orientation)
+                bindCustomNode(first, to: root, weight: ratio, windows: windows)
+                bindCustomNode(second, to: root, weight: 1 - ratio, windows: windows)
+        }
+
+        previouslyFocusedWindow?.markAsMostRecentChild()
+    }
+
+    @MainActor
     fileprivate func applySmoothLayout(_ requestedStyle: SmoothLayoutStyle, to windows: [Window], monitor: MonitorInfo) {
         guard !windows.isEmpty, requestedStyle != .manual else { return }
 
@@ -265,6 +307,45 @@ private func configureRoot(_ root: TilingContainer, orientation: Orientation) {
 @MainActor
 private func bindSmoothWindow(_ window: Window, to parent: TilingContainer) {
     window.bind(to: parent, adaptiveWeight: WEIGHT_AUTO, index: INDEX_BIND_LAST)
+}
+
+@MainActor
+private func bindSmoothWindow(_ window: Window, to parent: TilingContainer, weight: Double) {
+    window.bind(to: parent, adaptiveWeight: CGFloat(weight), index: INDEX_BIND_LAST)
+}
+
+@MainActor
+private func bindCustomNode(
+    _ node: SmoothCustomLayoutNode,
+    to parent: TilingContainer,
+    weight: Double,
+    windows: [Window],
+) {
+    switch node {
+        case .window(let slot):
+            bindSmoothWindow(windows[slot], to: parent, weight: weight)
+        case .split(let axis, let ratio, let first, let second):
+            if parent.orientation == axis.orientation {
+                // Flatten equal-axis splits while multiplying their weights.
+                // This produces the same geometry and matches AeroSpace's normalizer.
+                bindCustomNode(first, to: parent, weight: weight * ratio, windows: windows)
+                bindCustomNode(second, to: parent, weight: weight * (1 - ratio), windows: windows)
+            } else {
+                let container = TilingContainer(
+                    parent: parent,
+                    adaptiveWeight: CGFloat(weight),
+                    axis.orientation,
+                    .tiles,
+                    index: INDEX_BIND_LAST,
+                )
+                bindCustomNode(first, to: container, weight: ratio, windows: windows)
+                bindCustomNode(second, to: container, weight: 1 - ratio, windows: windows)
+            }
+    }
+}
+
+extension SmoothSplitAxis {
+    fileprivate var orientation: Orientation { self == .horizontal ? .h : .v }
 }
 
 @MainActor

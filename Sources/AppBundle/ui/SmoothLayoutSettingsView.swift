@@ -13,6 +13,15 @@ private struct SmoothMonitorSummary: Identifiable, Hashable {
     var orientationTitle: String { isHorizontal ? "Horizontal" : "Vertical" }
 }
 
+private struct SmoothCustomLayoutEditorTarget: Identifiable {
+    let monitor: SmoothMonitorSummary
+    let windowCount: Int
+    let layout: SmoothCustomLayoutBlueprint
+    let previousLayout: SmoothCustomLayoutBlueprint?
+
+    var id: String { "\(monitor.id):\(windowCount)" }
+}
+
 @MainActor
 public func smoothLayoutSettingsWindow() -> some Scene {
     SwiftUI.Window("AeroSpaceSmooth Settings", id: smoothLayoutSettingsWindowId) {
@@ -457,7 +466,7 @@ private struct SettingsCard<Content: View>: View {
     }
 }
 
-private struct SettingInfoButton: View {
+struct SettingInfoButton: View {
     let title: String
     let message: String
     @State private var isPresented = false
@@ -690,6 +699,7 @@ private struct RemoveRowButton: View {
 private struct MonitorLayoutsSettingsPane: View {
     @ObservedObject private var settings = SmoothLayoutSettingsStore.shared
     @State private var selectedMonitorId: String?
+    @State private var customEditorTarget: SmoothCustomLayoutEditorTarget?
 
     private var monitors: [SmoothMonitorSummary] {
         sortedMonitorInfos.map {
@@ -730,6 +740,21 @@ private struct MonitorLayoutsSettingsPane: View {
             }
             if selectedMonitorId == nil {
                 selectedMonitorId = monitors.first?.id
+            }
+        }
+        .sheet(item: $customEditorTarget) { target in
+            SmoothCustomLayoutEditorView(
+                monitorName: target.monitor.name,
+                monitorIsHorizontal: target.monitor.isHorizontal,
+                layout: target.layout,
+                previousLayout: target.previousLayout,
+            ) { layout in
+                settings.setCustomLayout(
+                    layout,
+                    windowCount: target.windowCount,
+                    monitorName: target.monitor.name,
+                    isHorizontal: target.monitor.isHorizontal,
+                )
             }
         }
     }
@@ -821,6 +846,12 @@ private struct MonitorLayoutsSettingsPane: View {
                             monitor: monitor,
                             count: count,
                             style: profile.style(for: count),
+                            customLayout: profile.customLayout(for: count),
+                            previousLayout: count > 1 ? editableLayout(
+                                profile: profile,
+                                count: count - 1,
+                                monitorIsHorizontal: monitor.isHorizontal,
+                            ) : nil,
                             enabled: profile.enabled,
                         )
                     }
@@ -834,6 +865,8 @@ private struct MonitorLayoutsSettingsPane: View {
         monitor: SmoothMonitorSummary,
         count: Int,
         style: SmoothLayoutStyle,
+        customLayout: SmoothCustomLayoutBlueprint?,
+        previousLayout: SmoothCustomLayoutBlueprint?,
         enabled: Bool,
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -871,8 +904,27 @@ private struct MonitorLayoutsSettingsPane: View {
                 style: style,
                 windowCount: count,
                 monitorIsHorizontal: monitor.isHorizontal,
+                customLayout: customLayout,
             )
             .frame(height: monitor.isHorizontal ? 105 : 150)
+
+            if style == .manual {
+                Button {
+                    customEditorTarget = SmoothCustomLayoutEditorTarget(
+                        monitor: monitor,
+                        windowCount: count,
+                        layout: customLayout ?? .preset(
+                            style: count == 1 ? .fullscreen : .dwindle,
+                            windowCount: count,
+                            monitorIsHorizontal: monitor.isHorizontal,
+                        ),
+                        previousLayout: previousLayout,
+                    )
+                } label: {
+                    Label("Edit Custom Layout", systemImage: "slider.horizontal.3")
+                }
+                .buttonStyle(.borderedProminent)
+            }
 
             Text(style.detail)
                 .font(.caption)
@@ -883,12 +935,25 @@ private struct MonitorLayoutsSettingsPane: View {
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .opacity(enabled ? 1 : 0.7)
     }
+
+    private func editableLayout(
+        profile: SmoothMonitorLayoutProfile,
+        count: Int,
+        monitorIsHorizontal: Bool,
+    ) -> SmoothCustomLayoutBlueprint {
+        profile.customLayout(for: count) ?? .preset(
+            style: profile.style(for: count),
+            windowCount: count,
+            monitorIsHorizontal: monitorIsHorizontal,
+        )
+    }
 }
 
 private struct SmoothLayoutPreview: View {
     let style: SmoothLayoutStyle
     let windowCount: Int
     let monitorIsHorizontal: Bool
+    let customLayout: SmoothCustomLayoutBlueprint?
 
     var body: some View {
         GeometryReader { geometry in
@@ -899,27 +964,32 @@ private struct SmoothLayoutPreview: View {
                 width: geometry.size.width - inset * 2,
                 height: geometry.size.height - inset * 2,
             )
-            let frames = SmoothLayoutPreviewGeometry.frames(
-                style: style,
-                count: windowCount,
-                monitorIsHorizontal: monitorIsHorizontal,
-            )
+            let frames: [(Int, CGRect)] = if style == .manual, let customLayout {
+                customLayout.frames.sorted { $0.key < $1.key }
+            } else {
+                SmoothLayoutPreviewGeometry.frames(
+                    style: style,
+                    count: windowCount,
+                    monitorIsHorizontal: monitorIsHorizontal,
+                ).enumerated().map { ($0.offset, $0.element) }
+            }
 
             ZStack(alignment: .topLeading) {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(.black.opacity(0.72))
 
-                if style == .manual {
+                if style == .manual, customLayout == nil {
                     VStack(spacing: 6) {
                         Image(systemName: "hand.draw")
                             .font(.title2)
-                        Text("Manual layout")
+                        Text("Custom layout not configured")
                             .font(.caption.bold())
                     }
                     .foregroundStyle(.white.opacity(0.9))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    ForEach(Array(frames.enumerated()), id: \.offset) { index, frame in
+                    ForEach(Array(frames.enumerated()), id: \.offset) { _, item in
+                        let (index, frame) = item
                         let rect = CGRect(
                             x: canvas.minX + frame.minX * canvas.width,
                             y: canvas.minY + frame.minY * canvas.height,

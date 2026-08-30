@@ -14,7 +14,7 @@ enum SmoothLayoutStyle: String, Codable, CaseIterable, Identifiable, Sendable {
 
     var title: String {
         switch self {
-            case .manual: "Manual"
+            case .manual: "Custom"
             case .fullscreen: "Fullscreen"
             case .columns: "Columns"
             case .rows: "Rows"
@@ -26,7 +26,7 @@ enum SmoothLayoutStyle: String, Codable, CaseIterable, Identifiable, Sendable {
 
     var detail: String {
         switch self {
-            case .manual: "Stops automatic rebuilding so you can move and resize the current tree."
+            case .manual: "Uses the visual layout saved for this monitor and window count."
             case .fullscreen: "One window fills the entire usable area."
             case .columns: "Windows appear side by side with equal widths."
             case .rows: "Windows are stacked with equal heights."
@@ -50,12 +50,20 @@ struct SmoothMonitorLayoutProfile: Codable, Equatable, Identifiable, Sendable {
     var enabled: Bool
     var tileLimit: Int
     var styles: [SmoothLayoutStyle]
+    var customLayouts: [String: SmoothCustomLayoutBlueprint]
 
     var id: String { monitorName }
 
     func style(for windowCount: Int) -> SmoothLayoutStyle {
         let index = min(max(windowCount, 1), Self.configuredWindowCount) - 1
         return normalized.styles[index]
+    }
+
+    func customLayout(for windowCount: Int) -> SmoothCustomLayoutBlueprint? {
+        guard let layout = customLayouts[String(min(max(windowCount, 1), Self.configuredWindowCount))] else {
+            return nil
+        }
+        return layout.windowCount == windowCount && layout.isValid ? layout : nil
     }
 
     var normalized: SmoothMonitorLayoutProfile {
@@ -70,6 +78,9 @@ struct SmoothMonitorLayoutProfile: Codable, Equatable, Identifiable, Sendable {
         } else if result.styles.count > Self.configuredWindowCount {
             result.styles = Array(result.styles.prefix(Self.configuredWindowCount))
         }
+        result.customLayouts = result.customLayouts.filter { key, layout in
+            Int(key) == layout.windowCount && layout.isValid
+        }
         return result
     }
 
@@ -81,14 +92,22 @@ struct SmoothMonitorLayoutProfile: Codable, Equatable, Identifiable, Sendable {
             styles: isHorizontal
                 ? [.fullscreen, .columns] + Array(repeating: .dwindle, count: configuredWindowCount - 2)
                 : [.fullscreen, .rows] + Array(repeating: .verticalPairs, count: configuredWindowCount - 2),
+            customLayouts: [:],
         )
     }
 
-    init(monitorName: String, enabled: Bool, tileLimit: Int = 6, styles: [SmoothLayoutStyle]) {
+    init(
+        monitorName: String,
+        enabled: Bool,
+        tileLimit: Int = 6,
+        styles: [SmoothLayoutStyle],
+        customLayouts: [String: SmoothCustomLayoutBlueprint] = [:],
+    ) {
         self.monitorName = monitorName
         self.enabled = enabled
         self.tileLimit = tileLimit
         self.styles = styles
+        self.customLayouts = customLayouts
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -96,6 +115,7 @@ struct SmoothMonitorLayoutProfile: Codable, Equatable, Identifiable, Sendable {
         case enabled
         case tileLimit
         case styles
+        case customLayouts
     }
 
     init(from decoder: any Decoder) throws {
@@ -104,6 +124,7 @@ struct SmoothMonitorLayoutProfile: Codable, Equatable, Identifiable, Sendable {
         enabled = try values.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
         tileLimit = try values.decodeIfPresent(Int.self, forKey: .tileLimit) ?? 6
         styles = try values.decodeIfPresent([SmoothLayoutStyle].self, forKey: .styles) ?? []
+        customLayouts = try values.decodeIfPresent([String: SmoothCustomLayoutBlueprint].self, forKey: .customLayouts) ?? [:]
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -112,6 +133,7 @@ struct SmoothMonitorLayoutProfile: Codable, Equatable, Identifiable, Sendable {
         try values.encode(enabled, forKey: .enabled)
         try values.encode(tileLimit, forKey: .tileLimit)
         try values.encode(styles, forKey: .styles)
+        try values.encode(customLayouts, forKey: .customLayouts)
     }
 }
 
@@ -168,7 +190,30 @@ final class SmoothLayoutSettingsStore: ObservableObject {
     func setStyle(_ style: SmoothLayoutStyle, windowCount: Int, monitorName: String, isHorizontal: Bool) {
         var profile = profile(named: monitorName, isHorizontal: isHorizontal).normalized
         let index = min(max(windowCount, 1), SmoothMonitorLayoutProfile.configuredWindowCount) - 1
+        let previousStyle = profile.styles[index]
         profile.styles[index] = style
+        if style == .manual, profile.customLayout(for: windowCount) == nil {
+            profile.customLayouts[String(windowCount)] = .preset(
+                style: previousStyle == .manual ? .dwindle : previousStyle,
+                windowCount: windowCount,
+                monitorIsHorizontal: isHorizontal,
+            )
+        }
+        profiles[monitorName] = profile
+        didChangeLayoutSettings()
+    }
+
+    func setCustomLayout(
+        _ layout: SmoothCustomLayoutBlueprint,
+        windowCount: Int,
+        monitorName: String,
+        isHorizontal: Bool,
+    ) {
+        guard layout.windowCount == windowCount, layout.isValid else { return }
+        var profile = profile(named: monitorName, isHorizontal: isHorizontal).normalized
+        let index = min(max(windowCount, 1), SmoothMonitorLayoutProfile.configuredWindowCount) - 1
+        profile.customLayouts[String(windowCount)] = layout
+        profile.styles[index] = .manual
         profiles[monitorName] = profile
         didChangeLayoutSettings()
     }
