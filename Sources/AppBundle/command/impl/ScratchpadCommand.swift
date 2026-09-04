@@ -51,6 +51,9 @@ final class ScratchpadManager: ObservableObject {
     private func assign(_ window: Window, to slot: Int) {
         guard (1 ... smoothWorkspaceSlotCount).contains(slot) else { return }
         let workspaceToKeepVisible = focus.workspace
+        if window.scratchpadSlot == nil {
+            window.scratchpadWasFloating = window.isFloating
+        }
         window.scratchpadSlot = slot
         window.isFullscreen = false
         window.bindAsFloatingWindow(to: Self.backingWorkspace(slot: slot))
@@ -144,13 +147,17 @@ final class ScratchpadManager: ObservableObject {
         let destination = focus.workspace.isUserFacing
             ? focus.workspace
             : getStubWorkspace(for: sourceWorkspace.workspaceMonitor)
+        let restoreAsFloating = window.scratchpadWasFloating ?? false
         window.scratchpadSlot = nil
+        window.scratchpadWasFloating = nil
         if wasHidden {
-            window.bindAsFloatingWindow(to: destination)
+            restore(window, to: destination, asFloating: restoreAsFloating)
             _ = window.focusWindow()
+        } else if !restoreAsFloating {
+            restore(window, to: sourceWorkspace, asFloating: false)
         }
         statusMessage = wasHidden
-            ? "\(window.app.name ?? "Window \(window.windowId)") was removed from Slot \(slot) and returned to workspace \(destination.name)."
+            ? "\(window.app.name ?? "Window \(window.windowId)") was removed from Slot \(slot) and restored on workspace \(destination.name)."
             : "\(window.app.name ?? "Window \(window.windowId)") was removed from Slot \(slot)."
         refreshWindowItems(force: true)
     }
@@ -226,7 +233,8 @@ final class ScratchpadManager: ObservableObject {
             let destination = getStubWorkspace(for: monitor)
             let orphanedWindows = internalWorkspace.allLeafWindowsRecursive.filter { $0.scratchpadSlot == nil }
             for window in orphanedWindows {
-                window.bindAsFloatingWindow(to: destination)
+                restore(window, to: destination, asFloating: window.scratchpadWasFloating ?? false)
+                window.scratchpadWasFloating = nil
             }
 
             if focus.workspace == internalWorkspace {
@@ -238,6 +246,14 @@ final class ScratchpadManager: ObservableObject {
             } else {
                 _ = monitor.setActiveWorkspace(destination)
             }
+        }
+    }
+
+    private func restore(_ window: Window, to workspace: Workspace, asFloating: Bool) {
+        if asFloating {
+            window.bindAsFloatingWindow(to: workspace)
+        } else {
+            window.bind(to: workspace.rootTilingContainer, adaptiveWeight: WEIGHT_AUTO, index: INDEX_BIND_LAST)
         }
     }
 }

@@ -82,7 +82,7 @@ final class ScratchpadCommandTest: XCTestCase {
 
         XCTAssertNil(window.scratchpadSlot)
         assertEquals(window.nodeWorkspace, workspace)
-        assertTrue(window.isFloating)
+        assertFalse(window.isFloating)
         assertTrue(ScratchpadManager.shared.items(in: 3).isEmpty)
     }
 
@@ -97,6 +97,7 @@ final class ScratchpadCommandTest: XCTestCase {
 
         XCTAssertNil(window.scratchpadSlot)
         assertEquals(window.nodeWorkspace, userWorkspace)
+        assertFalse(window.isFloating)
         assertEquals(focus.workspace, userWorkspace)
         assertEquals(mainMonitorInfo.activeWorkspace, userWorkspace)
     }
@@ -111,9 +112,37 @@ final class ScratchpadCommandTest: XCTestCase {
 
         XCTAssertNil(orphanedWindow.scratchpadSlot)
         assertEquals(orphanedWindow.nodeWorkspace, userWorkspace)
+        assertFalse(orphanedWindow.isFloating)
         assertEquals(focus.workspace, userWorkspace)
         assertEquals(mainMonitorInfo.activeWorkspace, userWorkspace)
         assertFalse(backingWorkspace.isVisible)
+    }
+
+    func testRemovingOriginallyFloatingWindowKeepsItFloating() async {
+        let workspace = focus.workspace
+        let window = TestWindow.new(id: 14, parent: workspace.floatingWindowsContainer)
+        _ = await parseCommand("scratchpad --window-id 14 assign 7").cmdOrDie.run(.defaultEnv, .emptyStdin)
+
+        ScratchpadManager.shared.remove(windowId: 14, from: 7)
+
+        XCTAssertNil(window.scratchpadSlot)
+        XCTAssertNil(window.scratchpadWasFloating)
+        assertEquals(window.nodeWorkspace, workspace)
+        assertTrue(window.isFloating)
+    }
+
+    func testRemovingPresentedTiledWindowRestoresTiling() async {
+        let workspace = focus.workspace
+        let window = TestWindow.new(id: 15, parent: workspace.rootTilingContainer)
+        _ = await parseCommand("scratchpad --window-id 15 assign 8").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        _ = await parseCommand("scratchpad toggle 8").cmdOrDie.run(.defaultEnv, .emptyStdin)
+
+        ScratchpadManager.shared.remove(windowId: 15, from: 8)
+
+        XCTAssertNil(window.scratchpadSlot)
+        XCTAssertNil(window.scratchpadWasFloating)
+        assertEquals(window.nodeWorkspace, workspace)
+        assertFalse(window.isFloating)
     }
 
     func testCaptureCanBeArmedAndCancelled() {

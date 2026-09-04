@@ -312,9 +312,10 @@ workspaces in natural order.
 Ten scratchpad slots can each hold multiple floating windows. In Settings, choose
 **Capture Next Window…** and then click the desired window. The slot lists every captured
 application and title, reports whether it is visible or hidden, and allows individual
-removal. Removing a hidden window returns it to the current workspace instead of leaving
-it stranded in the private backing workspace. **Show** and **Hide** move the complete
-slot over the current workspace or back to its hidden workspace. Automation and visual app rules can still use
+removal. Removing a window returns it to the current workspace instead of leaving it
+stranded in the private backing workspace, and restores whether it was tiled or floating
+before capture. **Show** and **Hide** move the complete slot over the current workspace or
+back to its hidden workspace. Automation and visual app rules can still use
 `scratchpad assign N` and `scratchpad toggle N`.
 
 The backing workspaces whose names start with `_smooth-` are private implementation

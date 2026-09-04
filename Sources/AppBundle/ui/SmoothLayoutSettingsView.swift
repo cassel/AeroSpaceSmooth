@@ -687,7 +687,7 @@ private struct ScratchpadWindowRow: View {
                 Label("Remove", systemImage: "minus.circle")
             }
             .buttonStyle(.borderless)
-            .help("Remove from this scratchpad and return hidden windows to the current workspace")
+            .help("Remove from this scratchpad, return it to the current workspace and restore its previous layout")
         }
         .padding(.leading, 64)
     }

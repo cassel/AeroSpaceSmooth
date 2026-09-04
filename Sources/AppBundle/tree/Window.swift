@@ -9,6 +9,7 @@ open class Window: TreeNode, Hashable {
     var noOuterGapsInFullscreen: Bool = false
     var layoutReason: LayoutReason = .standard
     var scratchpadSlot: Int?
+    var scratchpadWasFloating: Bool?
     var persistentLayoutTitle: String?
 
     @MainActor
