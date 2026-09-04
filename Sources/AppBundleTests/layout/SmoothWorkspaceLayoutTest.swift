@@ -268,6 +268,17 @@ final class SmoothWorkspaceLayoutTest: XCTestCase {
         assertEquals(origin, CGPoint(x: 1799, y: 1168))
     }
 
+    func testScratchpadHideOriginAcceptanceAllowsAxRounding() {
+        assertTrue(hideOriginsAreEffectivelyEqual(
+            CGPoint(x: 300, y: 900),
+            CGPoint(x: 306, y: 893),
+        ))
+        assertFalse(hideOriginsAreEffectivelyEqual(
+            CGPoint(x: 300, y: 900),
+            CGPoint(x: 1638, y: -260),
+        ))
+    }
+
     func testWindowConstraintViolationAllowsSmallRoundingDifferences() {
         let target = Rect(topLeftX: 0, topLeftY: 0, width: 460, height: 520)
 

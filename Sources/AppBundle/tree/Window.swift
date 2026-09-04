@@ -10,6 +10,8 @@ open class Window: TreeNode, Hashable {
     var layoutReason: LayoutReason = .standard
     var scratchpadSlot: Int?
     var scratchpadWasFloating: Bool?
+    var scratchpadIsPresented = false
+    var scratchpadUsesNativeMinimize = false
     var persistentLayoutTitle: String?
 
     @MainActor

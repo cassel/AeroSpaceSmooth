@@ -22,6 +22,8 @@ aerospace scratchpad [-h|--help] toggle <slot>
 
 `toggle` shows every window in the slot as a floating window on the focused workspace, or hides the slot when it is already visible there. Slots accept multiple windows and can be shown on any workspace.
 
+If an application repeatedly rejects its off-screen hiding position, AeroSpaceSmooth automatically uses native minimization for that window and restores it when the slot is shown.
+
 // =========================================================== Options
 include::./util/conditional-options-header.adoc[]
 

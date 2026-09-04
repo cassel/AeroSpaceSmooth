@@ -316,7 +316,9 @@ removal. Removing a window returns it to the current workspace instead of leavin
 stranded in the private backing workspace, and restores whether it was tiled or floating
 before capture. **Show** and **Hide** move the complete slot over the current workspace or
 back to its hidden workspace. Scratchpad toggle hotkeys run once per physical key press,
-so macOS key repeat cannot rapidly show and hide the same slot. Automation and visual app rules can still use
+so macOS key repeat cannot rapidly show and hide the same slot. If an application rejects
+the off-screen hiding position, the slot automatically falls back to native minimization
+for that window and restores it when shown. Automation and visual app rules can still use
 `scratchpad assign N` and `scratchpad toggle N`.
 
 The backing workspaces whose names start with `_smooth-` are private implementation

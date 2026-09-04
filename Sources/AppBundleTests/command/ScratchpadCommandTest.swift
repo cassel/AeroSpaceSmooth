@@ -30,14 +30,20 @@ final class ScratchpadCommandTest: XCTestCase {
         assertEquals(second.scratchpadSlot, 2)
         assertTrue(first.isFloating)
         assertTrue(second.isFloating)
+        assertFalse(first.scratchpadIsPresented)
+        assertFalse(second.scratchpadIsPresented)
         assertEquals(first.nodeWorkspace?.name, "_smooth-scratchpad-2")
 
         let shown = await parseCommand("scratchpad toggle 2").cmdOrDie.run(.defaultEnv, .emptyStdin)
         assertEquals(shown.exitCode.rawValue, 0)
         assertEquals(workspace.floatingWindows.map(\.windowId).sorted(), [1, 2])
+        assertTrue(first.scratchpadIsPresented)
+        assertTrue(second.scratchpadIsPresented)
 
         let hidden = await parseCommand("scratchpad toggle 2").cmdOrDie.run(.defaultEnv, .emptyStdin)
         assertEquals(hidden.exitCode.rawValue, 0)
+        assertFalse(first.scratchpadIsPresented)
+        assertFalse(second.scratchpadIsPresented)
         assertEquals(first.nodeWorkspace?.name, "_smooth-scratchpad-2")
         assertEquals(second.nodeWorkspace?.name, "_smooth-scratchpad-2")
     }
@@ -81,6 +87,8 @@ final class ScratchpadCommandTest: XCTestCase {
         ScratchpadManager.shared.remove(windowId: 11, from: 3)
 
         XCTAssertNil(window.scratchpadSlot)
+        assertFalse(window.scratchpadIsPresented)
+        assertFalse(window.scratchpadUsesNativeMinimize)
         assertEquals(window.nodeWorkspace, workspace)
         assertFalse(window.isFloating)
         assertTrue(ScratchpadManager.shared.items(in: 3).isEmpty)

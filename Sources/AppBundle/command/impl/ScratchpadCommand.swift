@@ -57,7 +57,9 @@ final class ScratchpadManager: ObservableObject {
         }
         window.scratchpadSlot = slot
         window.isFullscreen = false
+        window.scratchpadIsPresented = false
         window.bindAsFloatingWindow(to: Self.backingWorkspace(slot: slot))
+        (window as? MacWindow)?.prepareToHideScratchpad()
         _ = workspaceToKeepVisible.focusWorkspace()
         statusMessage = "\(window.app.name ?? "Window \(window.windowId)") was added to Slot \(slot) and hidden."
         refreshWindowItems(force: true)
@@ -69,14 +71,22 @@ final class ScratchpadManager: ObservableObject {
             return .fail(io.err("Scratchpad slot \(slot) has no windows. Focus a window and run 'scratchpad assign \(slot)' first."))
         }
 
-        let isPresented = windows.contains { $0.nodeWorkspace == workspace }
+        let isPresented = windows.contains { $0.scratchpadIsPresented && $0.nodeWorkspace == workspace }
         if isPresented {
             let backing = backingWorkspace(slot: slot)
-            for window in windows { window.bindAsFloatingWindow(to: backing) }
+            for window in windows {
+                window.scratchpadIsPresented = false
+                window.bindAsFloatingWindow(to: backing)
+                (window as? MacWindow)?.prepareToHideScratchpad()
+            }
             _ = workspace.focusWorkspace()
             shared.statusMessage = "Slot \(slot) was hidden."
         } else {
-            for window in windows { window.bindAsFloatingWindow(to: workspace) }
+            for window in windows {
+                window.scratchpadIsPresented = true
+                window.bindAsFloatingWindow(to: workspace)
+                (window as? MacWindow)?.prepareToShowScratchpad()
+            }
             _ = windows.first?.focusWindow()
             shared.statusMessage = "Slot \(slot) is now visible on workspace \(workspace.name)."
         }
@@ -138,25 +148,28 @@ final class ScratchpadManager: ObservableObject {
     }
 
     func isPresented(slot: Int, on workspace: Workspace) -> Bool {
-        Self.assignedWindows(in: slot).contains { $0.nodeWorkspace == workspace }
+        Self.assignedWindows(in: slot).contains { $0.scratchpadIsPresented && $0.nodeWorkspace == workspace }
     }
 
     func remove(windowId: UInt32, from slot: Int) {
         guard let window = Window.get(byId: windowId), window.scratchpadSlot == slot else { return }
-        let sourceWorkspace = window.nodeWorkspace.orDie()
-        let wasHidden = !sourceWorkspace.isUserFacing
+        let sourceWorkspace = window.nodeWorkspace
+        let wasHidden = !window.scratchpadIsPresented
         let destination = focus.workspace.isUserFacing
             ? focus.workspace
-            : getStubWorkspace(for: sourceWorkspace.workspaceMonitor)
+            : getStubWorkspace(for: sourceWorkspace?.workspaceMonitor ?? mainMonitorInfo)
         let restoreAsFloating = window.scratchpadWasFloating ?? false
-        window.scratchpadSlot = nil
-        window.scratchpadWasFloating = nil
         if wasHidden {
             restore(window, to: destination, asFloating: restoreAsFloating)
-            _ = window.focusWindow()
-        } else if !restoreAsFloating {
+        } else if !restoreAsFloating, let sourceWorkspace {
             restore(window, to: sourceWorkspace, asFloating: false)
         }
+        (window as? MacWindow)?.leaveScratchpad()
+        window.scratchpadSlot = nil
+        window.scratchpadWasFloating = nil
+        window.scratchpadIsPresented = false
+        window.scratchpadUsesNativeMinimize = false
+        if wasHidden { _ = window.focusWindow() }
         statusMessage = wasHidden
             ? "\(window.app.name ?? "Window \(window.windowId)") was removed from Slot \(slot) and restored on workspace \(destination.name)."
             : "\(window.app.name ?? "Window \(window.windowId)") was removed from Slot \(slot)."
@@ -166,7 +179,7 @@ final class ScratchpadManager: ObservableObject {
     func refreshWindowItems(force: Bool = false) {
         let grouped = Dictionary(grouping: Self.assignedWindows(), by: { $0.scratchpadSlot.orDie() })
         let signature = grouped.mapValues { windows in
-            windows.map { "\($0.windowId):\($0.nodeWorkspace?.name ?? "")" }
+            windows.map { "\($0.windowId):\($0.nodeWorkspace?.name ?? ""):\($0.scratchpadIsPresented)" }
         }
         guard force || signature != modelSignature else { return }
         modelSignature = signature
@@ -179,7 +192,7 @@ final class ScratchpadManager: ObservableObject {
                     applicationName: $0.app.name ?? "Application",
                     title: $0.persistentLayoutTitle ?? "Window \($0.windowId)",
                     applicationPath: $0.app.bundlePath,
-                    isPresented: !$0.nodeWorkspace.orDie().name.hasPrefix("_smooth-scratchpad-"),
+                    isPresented: $0.scratchpadIsPresented,
                 )
             }
         }
@@ -200,7 +213,7 @@ final class ScratchpadManager: ObservableObject {
                         applicationName: window.app.name ?? "Application",
                         title: title,
                         applicationPath: window.app.bundlePath,
-                        isPresented: !window.nodeWorkspace.orDie().name.hasPrefix("_smooth-scratchpad-"),
+                        isPresented: window.scratchpadIsPresented,
                     )
                 }
             }
@@ -214,8 +227,10 @@ final class ScratchpadManager: ObservableObject {
     }
 
     private static func assignedWindows() -> [Window] {
-        Workspace.all
-            .flatMap(\.allLeafWindowsRecursive)
+        let windows: [Window] = isUnitTest
+            ? Workspace.all.flatMap(\.allLeafWindowsRecursive)
+            : MacWindow.allWindows
+        return windows
             .filter { $0.scratchpadSlot != nil }
             .sorted { $0.windowId < $1.windowId }
     }

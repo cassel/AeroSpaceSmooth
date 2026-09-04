@@ -4,6 +4,8 @@ import Common
 final class MacWindow: Window {
     let macApp: MacApp
     private var prevUnhiddenProportionalPositionInsideWorkspaceRect: CGPoint?
+    private var scratchpadHideVerificationTask: Task<Void, Never>?
+    private var acceptedScratchpadHideOrigin: CGPoint?
 
     @MainActor
     private init(_ id: UInt32, _ actor: MacApp, lastFloatingSize: CGSize?, parent: NonLeafTreeNodeObject, adaptiveWeight: CGFloat, index: Int) {
@@ -80,6 +82,7 @@ final class MacWindow: Window {
         if MacWindow.allWindowsMap.removeValue(forKey: windowId) == nil {
             return
         }
+        scratchpadHideVerificationTask?.cancel()
         if !skipClosedWindowsCache { cacheClosedWindowIfNeeded() }
         let parent = unbindFromParent().parent
         let deadWindowWorkspace = parent.nodeWorkspace
@@ -121,6 +124,17 @@ final class MacWindow: Window {
     // todo it's part of the window layout and should be moved to layoutRecursive.swift
     @MainActor
     func hideInCorner(_ corner: OptimalHideCorner) async throws {
+        if scratchpadSlot != nil, !scratchpadIsPresented {
+            if scratchpadUsesNativeMinimize {
+                hideScratchpadWithNativeMinimize()
+                return
+            }
+            // AX notifications caused by the first position write can start a new
+            // refresh before verification finishes. Do not chase the application
+            // around the screen while we are waiting to see whether it accepted
+            // the hiding position.
+            if scratchpadHideVerificationTask != nil { return }
+        }
         guard let nodeMonitor else { return }
         // Don't accidentally override prevUnhiddenEmulationPosition in case of subsequent `hideInCorner` calls
         if !isHiddenInCorner {
@@ -166,7 +180,108 @@ final class MacWindow: Window {
                     edgeInset: macApp.appId == .zoom ? 0 : 1,
                 )
         }
+        if scratchpadSlot != nil,
+           !scratchpadIsPresented,
+           let acceptedScratchpadHideOrigin,
+           hideOriginsAreEffectivelyEqual(p, acceptedScratchpadHideOrigin)
+        {
+            return
+        }
         setAxFrame(p, nil)
+        if scratchpadSlot != nil, !scratchpadIsPresented {
+            verifyScratchpadHide(requestedOrigin: p)
+        }
+    }
+
+    @MainActor
+    func prepareToShowScratchpad() {
+        scratchpadHideVerificationTask?.cancel()
+        scratchpadHideVerificationTask = nil
+        acceptedScratchpadHideOrigin = nil
+        scratchpadIsPresented = true
+        if scratchpadUsesNativeMinimize {
+            setNativeMinimized(false)
+            layoutReason = .standard
+        } else {
+            unhideFromCorner()
+        }
+    }
+
+    @MainActor
+    func prepareToHideScratchpad() {
+        scratchpadHideVerificationTask?.cancel()
+        scratchpadHideVerificationTask = nil
+        acceptedScratchpadHideOrigin = nil
+        scratchpadIsPresented = false
+        if scratchpadUsesNativeMinimize {
+            hideScratchpadWithNativeMinimize()
+        }
+    }
+
+    @MainActor
+    func leaveScratchpad() {
+        scratchpadHideVerificationTask?.cancel()
+        scratchpadHideVerificationTask = nil
+        acceptedScratchpadHideOrigin = nil
+        if scratchpadUsesNativeMinimize {
+            setNativeMinimized(false)
+            layoutReason = .standard
+        } else {
+            unhideFromCorner()
+        }
+        scratchpadUsesNativeMinimize = false
+        scratchpadIsPresented = false
+    }
+
+    @MainActor
+    private func verifyScratchpadHide(requestedOrigin: CGPoint) {
+        scratchpadHideVerificationTask = Task.startUnstructured { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(180))
+            guard !Task.isCancelled, let self else { return }
+            guard self.scratchpadSlot != nil,
+                  !self.scratchpadIsPresented,
+                  let firstObservedOrigin = try? await self.getAxRect(.cancellable)?.topLeftCorner
+            else {
+                self.scratchpadHideVerificationTask = nil
+                return
+            }
+
+            if hideOriginsAreEffectivelyEqual(requestedOrigin, firstObservedOrigin) {
+                self.scratchpadHideVerificationTask = nil
+                self.acceptedScratchpadHideOrigin = requestedOrigin
+                return
+            }
+
+            // Confirm the refusal twice so a slow AX position write does not make
+            // a normally cooperative application use the fallback unnecessarily.
+            try? await Task.sleep(for: .milliseconds(120))
+            guard !Task.isCancelled,
+                  self.scratchpadSlot != nil,
+                  !self.scratchpadIsPresented,
+                  let secondObservedOrigin = try? await self.getAxRect(.cancellable)?.topLeftCorner
+            else {
+                self.scratchpadHideVerificationTask = nil
+                return
+            }
+            self.scratchpadHideVerificationTask = nil
+            guard !hideOriginsAreEffectivelyEqual(requestedOrigin, secondObservedOrigin) else {
+                self.acceptedScratchpadHideOrigin = requestedOrigin
+                return
+            }
+            self.scratchpadUsesNativeMinimize = true
+            self.hideScratchpadWithNativeMinimize()
+        }
+    }
+
+    @MainActor
+    private func hideScratchpadWithNativeMinimize() {
+        guard scratchpadSlot != nil, !scratchpadIsPresented else { return }
+        setNativeMinimized(true)
+        if parent?.kind != .macosMinimizedWindowsContainer {
+            let previousParentKind = parent?.kind ?? .floatingWindowsContainer
+            layoutReason = .macos(prevParentKind: previousParentKind)
+            bind(to: macosMinimizedWindowsContainer, adaptiveWeight: 1, index: INDEX_BIND_LAST)
+        }
     }
 
     @MainActor
@@ -212,6 +327,10 @@ final class MacWindow: Window {
     override func getAxRect(_ cm: CancellationMode) async throws -> Rect? {
         try await macApp.getAxRect(windowId, cm)
     }
+}
+
+func hideOriginsAreEffectivelyEqual(_ lhs: CGPoint, _ rhs: CGPoint, tolerance: CGFloat = 8) -> Bool {
+    abs(lhs.x - rhs.x) <= tolerance && abs(lhs.y - rhs.y) <= tolerance
 }
 
 func bottomEdgeHideOrigin(monitorRect: Rect, windowSize: CGSize, edgeInset: CGFloat = 1) -> CGPoint {
