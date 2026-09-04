@@ -35,8 +35,10 @@ import Foundation
         )
         try await runLightSession(.startup, .forceRun) {
             smartLayoutAtStartup()
+            await PersistentManualLayoutStore.shared.restoreAfterInitialRefresh()
             _ = await config.afterStartupCommand.run(.defaultEnv, .emptyStdin)
         }
+        await UpdateChecker.shared.checkAutomaticallyIfNeeded()
     }
 }
 

@@ -9,6 +9,7 @@ open class Window: TreeNode, Hashable {
     var noOuterGapsInFullscreen: Bool = false
     var layoutReason: LayoutReason = .standard
     var scratchpadSlot: Int?
+    var persistentLayoutTitle: String?
 
     @MainActor
     init(id: UInt32, _ app: any AbstractApp, lastFloatingSize: CGSize?, parent: NonLeafTreeNodeObject, adaptiveWeight: CGFloat, index: Int) {

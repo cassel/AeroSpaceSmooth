@@ -111,6 +111,8 @@ private enum SmoothSettingsSection: String, CaseIterable, Identifiable {
 private struct SmoothLayoutSettingsView: View {
     @StateObject private var configSettings = VisualConfigSettingsStore()
     @ObservedObject private var conflictMonitor = WindowManagerConflictMonitor.shared
+    @ObservedObject private var manualLayouts = PersistentManualLayoutStore.shared
+    @ObservedObject private var updateChecker = UpdateChecker.shared
     @State private var selection: SmoothSettingsSection = .layouts
     @State private var scratchpadStatus = ""
 
@@ -234,6 +236,48 @@ private struct SmoothLayoutSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            SettingsCard(
+                "Updates",
+                systemImage: "arrow.down.circle",
+                help: "Checks the public AeroSpaceSmooth releases on GitHub. Updates are never downloaded or installed automatically.",
+            ) {
+                Toggle(
+                    "Check for updates daily",
+                    isOn: Binding(
+                        get: { updateChecker.automaticallyChecks },
+                        set: { updateChecker.setAutomaticallyChecks($0) },
+                    ),
+                )
+                HStack {
+                    updateStatus
+                    Spacer()
+                    Button("Check Now") {
+                        Task.startUnstructured { await updateChecker.check() }
+                    }
+                    .disabled(updateChecker.status == .checking)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var updateStatus: some View {
+        switch updateChecker.status {
+            case .idle:
+                Text("Not checked yet").foregroundStyle(.secondary)
+            case .checking:
+                ProgressView().controlSize(.small)
+                Text("Checking…").foregroundStyle(.secondary)
+            case .current(let release):
+                Label("Up to date (\(release.version))", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+            case .available(let release):
+                Button("\(release.title) is available") {
+                    NSWorkspace.shared.open(release.pageUrl)
+                }
+            case .failed(let message):
+                Text(message).foregroundStyle(.secondary)
         }
     }
 
@@ -284,6 +328,27 @@ private struct SmoothLayoutSettingsView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                }
+            }
+
+            SettingsCard(
+                "Restore Manual Layouts",
+                systemImage: "arrow.counterclockwise.square",
+                help: "When automatic layout is disabled for a monitor, AeroSpaceSmooth remembers that workspace's tiling groups, order and proportions and restores them after relaunch.",
+            ) {
+                Toggle(
+                    "Remember layouts while automatic layout is off",
+                    isOn: Binding(
+                        get: { manualLayouts.isEnabled },
+                        set: { manualLayouts.setEnabled($0) },
+                    ),
+                )
+                HStack {
+                    Text("\(manualLayouts.layouts.count) saved workspace layouts")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Clear Saved Layouts") { manualLayouts.clear() }
+                        .disabled(manualLayouts.layouts.isEmpty)
                 }
             }
 

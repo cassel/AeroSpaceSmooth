@@ -47,6 +47,7 @@ func runHeavyCompleteRefreshSession(
             try await normalizeLayoutReason()
             await reconcileSmoothWorkspaceLayoutsRespectingWindowConstraints()
             if shouldLayoutWorkspaces { try await layoutWorkspaces() }
+            await PersistentManualLayoutStore.shared.captureIfReady()
         }
     }
     switch res {
