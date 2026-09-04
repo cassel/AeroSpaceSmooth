@@ -299,10 +299,10 @@ private struct SmoothLayoutSettingsView: View {
                         Text(presentation.title).tag(presentation)
                     }
                 }
-                .pickerStyle(.segmented)
+                .pickerStyle(.menu)
 
-                Label(menuBarPreviewText, systemImage: "rectangle.3.group")
-                    .font(.system(.body, design: .rounded, weight: .semibold))
+                MenuBarLabel()
+                    .environmentObject(TrayMenuModel.shared)
                     .padding(.vertical, 7)
                     .padding(.horizontal, 11)
                     .background(.quaternary.opacity(0.55), in: Capsule())
@@ -311,17 +311,6 @@ private struct SmoothLayoutSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-        }
-    }
-
-    private var menuBarPreviewText: String {
-        switch menuBarAppearance.presentation {
-            case .iconOnly: ""
-            case .focusedWorkspace: TrayMenuModel.shared.workspaces.first(where: \.isFocused)?.name ?? "1"
-            case .allDisplays:
-                TrayMenuModel.shared.activeWorkspaceNames
-                    .joined(separator: " · ")
-                    .takeIf { !$0.isEmpty } ?? "1 · 2"
         }
     }
 

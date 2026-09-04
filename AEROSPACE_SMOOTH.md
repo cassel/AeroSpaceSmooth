@@ -81,8 +81,11 @@ open -a AeroSpaceSmooth --args --open-settings
 
 The menu bar uses one native AeroSpaceSmooth symbol on every macOS version. In
 **General → Menu Bar**, choose whether that symbol appears by itself, beside the focused
-workspace, or beside the active workspace on every display. These presentation choices
-are kept out of the status menu so its actions remain compact and predictable.
+workspace, beside the active workspace on every display, or with i3-style grouped or
+ordered workspace chips. Grouped presentation puts visible workspaces before hidden
+occupied ones; ordered presentation keeps visible and occupied workspaces in configured
+order. These choices stay out of the status menu so its actions remain compact and
+predictable.
 
 The app needs macOS Accessibility permission before it can manage windows. Avoid
 running official AeroSpace and AeroSpaceSmooth at the same time: two window managers

@@ -45,4 +45,16 @@ final class WorkspaceBarSettingsTest: XCTestCase {
         let reopened = MenuBarAppearanceSettings(defaults: defaults)
         assertEquals(reopened.presentation, .iconOnly)
     }
+
+    func testLegacyI3MenuBarPresentationsAreMigrated() throws {
+        let suiteName = "MenuBarAppearanceMigrationTest.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set("i3", forKey: "displayStyle")
+        assertEquals(MenuBarAppearanceSettings(defaults: defaults).presentation, .i3Grouped)
+
+        defaults.set("i3Ordered", forKey: "displayStyle")
+        assertEquals(MenuBarAppearanceSettings(defaults: defaults).presentation, .i3Ordered)
+    }
 }

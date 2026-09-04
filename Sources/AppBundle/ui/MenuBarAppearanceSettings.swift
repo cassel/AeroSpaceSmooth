@@ -5,6 +5,8 @@ enum MenuBarPresentation: String, CaseIterable, Identifiable, Equatable, Hashabl
     case iconOnly
     case focusedWorkspace
     case allDisplays
+    case i3Grouped
+    case i3Ordered
 
     var id: String { rawValue }
 
@@ -13,6 +15,8 @@ enum MenuBarPresentation: String, CaseIterable, Identifiable, Equatable, Hashabl
             case .iconOnly: "Icon Only"
             case .focusedWorkspace: "Current Workspace"
             case .allDisplays: "All Displays"
+            case .i3Grouped: "i3 Grouped"
+            case .i3Ordered: "i3 Ordered"
         }
     }
 
@@ -21,6 +25,8 @@ enum MenuBarPresentation: String, CaseIterable, Identifiable, Equatable, Hashabl
             case .iconOnly: "Shows only the AeroSpaceSmooth icon for the most compact menu bar."
             case .focusedWorkspace: "Shows the same icon followed by the focused workspace."
             case .allDisplays: "Shows the same icon followed by the active workspace on each display."
+            case .i3Grouped: "Groups visible workspaces first, followed by occupied workspaces that are currently hidden."
+            case .i3Ordered: "Shows visible and occupied workspaces together in their configured order."
         }
     }
 }
@@ -34,9 +40,15 @@ final class MenuBarAppearanceSettings: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        presentation = defaults.string(forKey: Keys.presentation)
-            .flatMap(MenuBarPresentation.init(rawValue:))
-            ?? .focusedWorkspace
+        if let stored = defaults.string(forKey: Keys.presentation).flatMap(MenuBarPresentation.init(rawValue:)) {
+            presentation = stored
+        } else {
+            presentation = switch defaults.string(forKey: Keys.legacyDisplayStyle) {
+                case "i3": .i3Grouped
+                case "i3Ordered": .i3Ordered
+                default: .focusedWorkspace
+            }
+        }
     }
 
     func setPresentation(_ presentation: MenuBarPresentation) {
@@ -46,5 +58,6 @@ final class MenuBarAppearanceSettings: ObservableObject {
 
     private enum Keys {
         static let presentation = "menuBarPresentation"
+        static let legacyDisplayStyle = "displayStyle"
     }
 }

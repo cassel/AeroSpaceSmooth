@@ -45,6 +45,9 @@ enum AxPermissionStatus: Equatable {
             name: $0.name,
             suffix: suffix,
             isFocused: focus.workspace == $0,
+            isEffectivelyEmpty: $0.isEffectivelyEmpty,
+            isVisible: $0.isVisible,
+            hasFullscreenWindows: $0.allLeafWindowsRecursive.contains { $0.isFullscreen },
         )
     }
     TrayMenuModel.shared.activeWorkspaceNames = sortedMonitors.compactMap {
@@ -58,4 +61,7 @@ struct WorkspaceViewModel: Hashable {
     let name: String
     let suffix: String
     let isFocused: Bool
+    let isEffectivelyEmpty: Bool
+    let isVisible: Bool
+    let hasFullscreenWindows: Bool
 }
