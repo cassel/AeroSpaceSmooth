@@ -4,6 +4,24 @@ import Foundation
 import HotKey
 
 @MainActor private var hotkeys: [String: HotKey] = [:]
+@MainActor private var hotkeyRepeatGuard = HotkeyRepeatGuard()
+
+struct HotkeyRepeatGuard {
+    private var pressedBindings: Set<String> = []
+
+    mutating func keyDown(_ binding: String, suppressesRepeat: Bool) -> Bool {
+        guard suppressesRepeat else { return true }
+        return pressedBindings.insert(binding).inserted
+    }
+
+    mutating func keyUp(_ binding: String) {
+        pressedBindings.remove(binding)
+    }
+
+    mutating func reset() {
+        pressedBindings.removeAll()
+    }
+}
 
 @MainActor func resetHotKeys() {
     // Explicitly unregister all hotkeys. We cannot always rely on destruction of the HotKey object to trigger
@@ -12,6 +30,7 @@ import HotKey
         key.isEnabled = false
     }
     hotkeys = [:]
+    hotkeyRepeatGuard.reset()
 }
 
 extension HotKey {
@@ -29,8 +48,11 @@ extension HotKey {
 @MainActor func activateMode_nonCancellable(_ targetMode: String?) async {
     let targetBindings = targetMode.flatMap { config.modes[$0] }?.bindings ?? [:]
     for binding in targetBindings.values where !hotkeys.keys.contains(binding.descriptionWithKeyCode) {
+        let bindingId = binding.descriptionWithKeyCode
+        let suppressesRepeat = binding.commands.flatten().contains { $0.suppressesKeyRepeat }
         hotkeys[binding.descriptionWithKeyCode] = HotKey(key: binding.keyCode, modifiers: binding.modifiers, keyDownHandler: {
-            Task.startUnstructured {
+            Task.startUnstructured { @MainActor in
+                guard hotkeyRepeatGuard.keyDown(bindingId, suppressesRepeat: suppressesRepeat) else { return }
                 if let activeMode {
                     broadcastEvent(.bindingTriggered(
                         mode: activeMode,
@@ -42,10 +64,17 @@ extension HotKey {
                     }
                 }
             }
+        }, keyUpHandler: {
+            Task.startUnstructured { @MainActor in
+                hotkeyRepeatGuard.keyUp(bindingId)
+            }
         })
     }
     for (binding, key) in hotkeys {
         key.isEnabled = targetBindings.keys.contains(binding)
+        if !key.isEnabled {
+            hotkeyRepeatGuard.keyUp(binding)
+        }
     }
     let oldMode = activeMode
     activeMode = targetMode

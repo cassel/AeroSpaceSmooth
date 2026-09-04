@@ -10,9 +10,14 @@ protocol Command: AeroAny, Equatable, Sendable {
 
     /// We should reset closedWindowsCache when the command can potentially change the tree
     var shouldResetClosedWindowsCache: Bool { get }
+
+    /// Toggle-like commands can opt out of macOS key-repeat when invoked by a hotkey.
+    var suppressesKeyRepeat: Bool { get }
 }
 
 extension Command {
+    var suppressesKeyRepeat: Bool { false }
+
     static func == (lhs: Self, rhs: Self) -> Bool {
         return lhs.args.equals(rhs.args)
     }

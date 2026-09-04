@@ -5,6 +5,7 @@ import Common
 struct ScratchpadCommand: Command {
     let args: ScratchpadCmdArgs
     /*conforms*/ let shouldResetClosedWindowsCache = true
+    var suppressesKeyRepeat: Bool { args.action.val == .toggle }
 
     func run(_ env: CmdEnv, _ io: CmdIo) -> BinaryExitCode {
         switch args.action.val {
