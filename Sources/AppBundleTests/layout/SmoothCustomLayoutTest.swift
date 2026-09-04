@@ -198,10 +198,37 @@ final class SmoothCustomLayoutTest: XCTestCase {
         explicitlyChangedProfile.styles[3] = .grid
         defaults.set(
             try JSONEncoder().encode(["LG Ultra HD": explicitlyChangedProfile]),
-            forKey: "AeroSpaceSmooth.monitor-layout-profiles.v1",
+            forKey: "AeroSpaceSmooth.monitor-layout-profiles.v2",
         )
         let reopened = SmoothLayoutSettingsStore(defaults: defaults)
         assertEquals(reopened.profile(named: "LG Ultra HD", isHorizontal: true).style(for: 4), .grid)
+    }
+
+    func testLegacyMonitorProfileMigratesToStableIdentifierAndSurvivesRename() throws {
+        let suiteName = "SmoothMonitorIdentifierTest.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let legacy = SmoothMonitorLayoutProfile(
+            monitorName: "Old Display Name",
+            enabled: false,
+            tileLimit: 4,
+            styles: Array(repeating: .grid, count: SmoothMonitorLayoutProfile.configuredWindowCount),
+        )
+        defaults.set(
+            try JSONEncoder().encode(["Old Display Name": legacy]),
+            forKey: "AeroSpaceSmooth.monitor-layout-profiles.v1",
+        )
+
+        let store = SmoothLayoutSettingsStore(defaults: defaults)
+        let migrated = store.profile(identifier: "display-uuid", named: "Old Display Name", isHorizontal: true)
+        assertEquals(migrated.monitorIdentifier, "display-uuid")
+        assertEquals(migrated.tileLimit, 4)
+        assertFalse(migrated.enabled)
+
+        let renamed = store.profile(identifier: "display-uuid", named: "Localized Display Name", isHorizontal: true)
+        assertEquals(renamed.monitorName, "Localized Display Name")
+        assertEquals(renamed.tileLimit, 4)
+        assertEquals(store.profiles.count, 1)
     }
 
     func testRuntimeAppliesHybridCustomTreeAndDoesNotRebuildItRepeatedly() {

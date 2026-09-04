@@ -46,13 +46,14 @@ enum SmoothLayoutStyle: String, Codable, CaseIterable, Identifiable, Sendable {
 struct SmoothMonitorLayoutProfile: Codable, Equatable, Identifiable, Sendable {
     static let configuredWindowCount = 10
 
+    var monitorIdentifier: String?
     var monitorName: String
     var enabled: Bool
     var tileLimit: Int
     var styles: [SmoothLayoutStyle]
     var customLayouts: [String: SmoothCustomLayoutBlueprint]
 
-    var id: String { monitorName }
+    var id: String { monitorIdentifier ?? "legacy-name:\(monitorName)" }
 
     func style(for windowCount: Int) -> SmoothLayoutStyle {
         let index = min(max(windowCount, 1), Self.configuredWindowCount) - 1
@@ -91,8 +92,13 @@ struct SmoothMonitorLayoutProfile: Codable, Equatable, Identifiable, Sendable {
         return result
     }
 
-    static func defaultProfile(monitorName: String, isHorizontal: Bool) -> SmoothMonitorLayoutProfile {
+    static func defaultProfile(
+        monitorIdentifier: String? = nil,
+        monitorName: String,
+        isHorizontal: Bool,
+    ) -> SmoothMonitorLayoutProfile {
         SmoothMonitorLayoutProfile(
+            monitorIdentifier: monitorIdentifier,
             monitorName: monitorName,
             enabled: true,
             tileLimit: monitorName == "Built-in Retina Display" ? 5 : 6,
@@ -104,12 +110,14 @@ struct SmoothMonitorLayoutProfile: Codable, Equatable, Identifiable, Sendable {
     }
 
     init(
+        monitorIdentifier: String? = nil,
         monitorName: String,
         enabled: Bool,
         tileLimit: Int = 6,
         styles: [SmoothLayoutStyle],
         customLayouts: [String: SmoothCustomLayoutBlueprint] = [:],
     ) {
+        self.monitorIdentifier = monitorIdentifier
         self.monitorName = monitorName
         self.enabled = enabled
         self.tileLimit = tileLimit
@@ -118,6 +126,7 @@ struct SmoothMonitorLayoutProfile: Codable, Equatable, Identifiable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
+        case monitorIdentifier
         case monitorName
         case enabled
         case tileLimit
@@ -127,6 +136,7 @@ struct SmoothMonitorLayoutProfile: Codable, Equatable, Identifiable, Sendable {
 
     init(from decoder: any Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
+        monitorIdentifier = try values.decodeIfPresent(String.self, forKey: .monitorIdentifier)
         monitorName = try values.decode(String.self, forKey: .monitorName)
         enabled = try values.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
         tileLimit = try values.decodeIfPresent(Int.self, forKey: .tileLimit) ?? 6
@@ -136,6 +146,7 @@ struct SmoothMonitorLayoutProfile: Codable, Equatable, Identifiable, Sendable {
 
     func encode(to encoder: any Encoder) throws {
         var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encodeIfPresent(monitorIdentifier, forKey: .monitorIdentifier)
         try values.encode(monitorName, forKey: .monitorName)
         try values.encode(enabled, forKey: .enabled)
         try values.encode(tileLimit, forKey: .tileLimit)
@@ -148,7 +159,8 @@ struct SmoothMonitorLayoutProfile: Codable, Equatable, Identifiable, Sendable {
 final class SmoothLayoutSettingsStore: ObservableObject {
     static let shared = SmoothLayoutSettingsStore()
 
-    private static let defaultsKey = "AeroSpaceSmooth.monitor-layout-profiles.v1"
+    private static let defaultsKey = "AeroSpaceSmooth.monitor-layout-profiles.v2"
+    private static let legacyDefaultsKey = "AeroSpaceSmooth.monitor-layout-profiles.v1"
     private static let customSelectionRepairKey = "AeroSpaceSmooth.custom-layout-selection-repair.v1"
     private let defaults: UserDefaults
 
@@ -157,7 +169,7 @@ final class SmoothLayoutSettingsStore: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        profiles = defaults.data(forKey: Self.defaultsKey)
+        profiles = (defaults.data(forKey: Self.defaultsKey) ?? defaults.data(forKey: Self.legacyDefaultsKey))
             .flatMap { try? JSONDecoder().decode([String: SmoothMonitorLayoutProfile].self, from: $0) }
             ?? [:]
         profiles = profiles.mapValues(\.normalized)
@@ -165,40 +177,78 @@ final class SmoothLayoutSettingsStore: ObservableObject {
     }
 
     func profile(for monitor: MonitorInfo) -> SmoothMonitorLayoutProfile {
-        if let profile = profiles[monitor.name] { return profile.normalized }
-        let profile = SmoothMonitorLayoutProfile.defaultProfile(
-            monitorName: monitor.name,
+        profile(
+            identifier: monitor.stableIdentifier,
+            named: monitor.name,
             isHorizontal: monitor.width >= monitor.height,
         )
-        profiles[monitor.name] = profile
+    }
+
+    func profile(identifier: String, named monitorName: String, isHorizontal: Bool) -> SmoothMonitorLayoutProfile {
+        if var profile = profiles[identifier] {
+            if profile.monitorIdentifier != identifier || profile.monitorName != monitorName {
+                profile.monitorIdentifier = identifier
+                profile.monitorName = monitorName
+                profiles[identifier] = profile.normalized
+                persist()
+            }
+            return profile.normalized
+        }
+
+        // Profiles from v1 were keyed only by the visible display name. Claim a
+        // legacy profile once, then persist it under the hardware UUID.
+        if let legacyKey = profiles.first(where: {
+            $0.value.monitorIdentifier == nil && $0.value.monitorName == monitorName
+        })?.key {
+            var profile = profiles.removeValue(forKey: legacyKey).orDie()
+            profile.monitorIdentifier = identifier
+            profile.monitorName = monitorName
+            profiles[identifier] = profile.normalized
+            persist()
+            return profile.normalized
+        }
+
+        let profile = SmoothMonitorLayoutProfile.defaultProfile(
+            monitorIdentifier: identifier,
+            monitorName: monitorName,
+            isHorizontal: isHorizontal,
+        )
+        profiles[identifier] = profile
         persist()
         return profile
     }
 
     func profile(named monitorName: String, isHorizontal: Bool) -> SmoothMonitorLayoutProfile {
         profiles[monitorName]
+            ?? profiles.values.first { $0.monitorName == monitorName }
             ?? SmoothMonitorLayoutProfile.defaultProfile(
                 monitorName: monitorName,
                 isHorizontal: isHorizontal,
             )
     }
 
-    func setEnabled(_ enabled: Bool, monitorName: String, isHorizontal: Bool) {
-        var profile = profile(named: monitorName, isHorizontal: isHorizontal)
+    func setEnabled(_ enabled: Bool, monitorIdentifier: String, monitorName: String, isHorizontal: Bool) {
+        var profile = profile(identifier: monitorIdentifier, named: monitorName, isHorizontal: isHorizontal)
         profile.enabled = enabled
-        profiles[monitorName] = profile.normalized
+        profiles[monitorIdentifier] = profile.normalized
         didChangeLayoutSettings()
     }
 
-    func setTileLimit(_ tileLimit: Int, monitorName: String, isHorizontal: Bool) {
-        var profile = profile(named: monitorName, isHorizontal: isHorizontal)
+    func setTileLimit(_ tileLimit: Int, monitorIdentifier: String, monitorName: String, isHorizontal: Bool) {
+        var profile = profile(identifier: monitorIdentifier, named: monitorName, isHorizontal: isHorizontal)
         profile.tileLimit = tileLimit
-        profiles[monitorName] = profile.normalized
+        profiles[monitorIdentifier] = profile.normalized
         didChangeLayoutSettings()
     }
 
-    func setStyle(_ style: SmoothLayoutStyle, windowCount: Int, monitorName: String, isHorizontal: Bool) {
-        var profile = profile(named: monitorName, isHorizontal: isHorizontal).normalized
+    func setStyle(
+        _ style: SmoothLayoutStyle,
+        windowCount: Int,
+        monitorIdentifier: String,
+        monitorName: String,
+        isHorizontal: Bool,
+    ) {
+        var profile = profile(identifier: monitorIdentifier, named: monitorName, isHorizontal: isHorizontal).normalized
         let index = min(max(windowCount, 1), SmoothMonitorLayoutProfile.configuredWindowCount) - 1
         let previousStyle = profile.styles[index]
         profile.styles[index] = style
@@ -209,22 +259,23 @@ final class SmoothLayoutSettingsStore: ObservableObject {
                 monitorIsHorizontal: isHorizontal,
             )
         }
-        profiles[monitorName] = profile
+        profiles[monitorIdentifier] = profile
         didChangeLayoutSettings()
     }
 
     func setCustomLayout(
         _ layout: SmoothCustomLayoutBlueprint,
         windowCount: Int,
+        monitorIdentifier: String,
         monitorName: String,
         isHorizontal: Bool,
     ) {
         guard layout.windowCount == windowCount, layout.isValid else { return }
-        var profile = profile(named: monitorName, isHorizontal: isHorizontal).normalized
+        var profile = profile(identifier: monitorIdentifier, named: monitorName, isHorizontal: isHorizontal).normalized
         let index = min(max(windowCount, 1), SmoothMonitorLayoutProfile.configuredWindowCount) - 1
         profile.customLayouts[String(windowCount)] = layout
         profile.styles[index] = .manual
-        profiles[monitorName] = profile
+        profiles[monitorIdentifier] = profile
         // Closing the editor generates window events that can cancel the
         // settings refresh. Drop the cached topology first so the next refresh
         // must apply the newly saved blueprint even when that initial task is
@@ -233,15 +284,18 @@ final class SmoothLayoutSettingsStore: ObservableObject {
         didChangeLayoutSettings()
     }
 
-    func resetProfile(monitorName: String, isHorizontal: Bool) {
-        profiles[monitorName] = .defaultProfile(monitorName: monitorName, isHorizontal: isHorizontal)
+    func resetProfile(monitorIdentifier: String, monitorName: String, isHorizontal: Bool) {
+        profiles[monitorIdentifier] = .defaultProfile(
+            monitorIdentifier: monitorIdentifier,
+            monitorName: monitorName,
+            isHorizontal: isHorizontal,
+        )
         didChangeLayoutSettings()
     }
 
     func monitorsDidChange(_ monitors: [MonitorInfo]) {
-        // NSScreen indices are temporary and can change every time a display is
-        // disconnected. Profiles are keyed by the stable display name, so make
-        // sure every reconnected monitor is matched before refreshing the UI.
+        // NSScreen indices and names can both change after a reconnect. Resolve
+        // every monitor through its Core Graphics UUID before refreshing the UI.
         for monitor in monitors {
             _ = profile(for: monitor)
         }

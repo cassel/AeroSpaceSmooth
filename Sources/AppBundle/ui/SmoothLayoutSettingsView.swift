@@ -5,13 +5,12 @@ import UniformTypeIdentifiers
 let smoothLayoutSettingsWindowId = "aerospace-smooth-layout-settings"
 
 private struct SmoothMonitorSummary: Identifiable, Hashable {
+    let identifier: String
     let name: String
     let width: CGFloat
     let height: CGFloat
 
-    // The AppKit screen index is reassigned after a display reconnect. Layout
-    // profiles are already keyed by name, so use the same stable identity here.
-    var id: String { name }
+    var id: String { identifier }
     var isHorizontal: Bool { width >= height }
     var orientationTitle: String { isHorizontal ? "Horizontal" : "Vertical" }
     var layoutPreviewHeight: CGFloat { isHorizontal ? 180 : 260 }
@@ -1043,6 +1042,7 @@ private struct MonitorLayoutsSettingsPane: View {
     private var monitors: [SmoothMonitorSummary] {
         sortedMonitorInfos.map {
             SmoothMonitorSummary(
+                identifier: $0.stableIdentifier,
                 name: $0.name,
                 width: $0.width,
                 height: $0.height,
@@ -1096,6 +1096,7 @@ private struct MonitorLayoutsSettingsPane: View {
                 settings.setCustomLayout(
                     layout,
                     windowCount: target.windowCount,
+                    monitorIdentifier: target.monitor.identifier,
                     monitorName: target.monitor.name,
                     isHorizontal: target.monitor.isHorizontal,
                 )
@@ -1118,7 +1119,11 @@ private struct MonitorLayoutsSettingsPane: View {
     }
 
     private func monitorEditor(_ monitor: SmoothMonitorSummary) -> some View {
-        let profile = settings.profile(named: monitor.name, isHorizontal: monitor.isHorizontal).normalized
+        let profile = settings.profile(
+            identifier: monitor.identifier,
+            named: monitor.name,
+            isHorizontal: monitor.isHorizontal,
+        ).normalized
         return ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 HStack(alignment: .firstTextBaseline) {
@@ -1130,7 +1135,11 @@ private struct MonitorLayoutsSettingsPane: View {
                     }
                     Spacer()
                     Button("Reset to Defaults") {
-                        settings.resetProfile(monitorName: monitor.name, isHorizontal: monitor.isHorizontal)
+                        settings.resetProfile(
+                            monitorIdentifier: monitor.identifier,
+                            monitorName: monitor.name,
+                            isHorizontal: monitor.isHorizontal,
+                        )
                     }
                 }
 
@@ -1139,11 +1148,16 @@ private struct MonitorLayoutsSettingsPane: View {
                         "Automatic layout on this monitor",
                         isOn: Binding(
                             get: {
-                                settings.profile(named: monitor.name, isHorizontal: monitor.isHorizontal).enabled
+                                settings.profile(
+                                    identifier: monitor.identifier,
+                                    named: monitor.name,
+                                    isHorizontal: monitor.isHorizontal,
+                                ).enabled
                             },
                             set: {
                                 settings.setEnabled(
                                     $0,
+                                    monitorIdentifier: monitor.identifier,
                                     monitorName: monitor.name,
                                     isHorizontal: monitor.isHorizontal,
                                 )
@@ -1168,11 +1182,16 @@ private struct MonitorLayoutsSettingsPane: View {
                         "\(profile.tileLimit)",
                         value: Binding(
                             get: {
-                                settings.profile(named: monitor.name, isHorizontal: monitor.isHorizontal).tileLimit
+                                settings.profile(
+                                    identifier: monitor.identifier,
+                                    named: monitor.name,
+                                    isHorizontal: monitor.isHorizontal,
+                                ).tileLimit
                             },
                             set: {
                                 settings.setTileLimit(
                                     $0,
+                                    monitorIdentifier: monitor.identifier,
                                     monitorName: monitor.name,
                                     isHorizontal: monitor.isHorizontal,
                                 )
@@ -1228,6 +1247,7 @@ private struct MonitorLayoutsSettingsPane: View {
                             settings.setStyle(
                                 candidate,
                                 windowCount: count,
+                                monitorIdentifier: monitor.identifier,
                                 monitorName: monitor.name,
                                 isHorizontal: monitor.isHorizontal,
                             )

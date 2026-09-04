@@ -27,12 +27,60 @@ private struct AnimatedLayoutFrame {
     let end: Rect
 }
 
+struct RejectedWindowSize: Equatable {
+    let requested: CGSize
+    let observed: CGSize
+    let confirmations: Int
+}
+
+/// Learns when an application consistently clamps a requested AX size. Once a
+/// refusal is confirmed, layout passes continue positioning the window but stop
+/// resubmitting that impossible size until the requested size changes.
+@MainActor
+struct LayoutFrameAcceptanceTracker {
+    private(set) var rejectedSizes: [UInt32: RejectedWindowSize] = [:]
+
+    mutating func sizeToApply(windowId: UInt32, requested: CGSize?) -> CGSize? {
+        guard let requested,
+              let rejection = rejectedSizes[windowId],
+              rejection.confirmations >= 2,
+              sizesAreEffectivelyEqual(requested, rejection.requested)
+        else { return requested }
+        return nil
+    }
+
+    mutating func observe(windowId: UInt32, requested: CGSize, observed: CGSize) {
+        if sizesAreEffectivelyEqual(requested, observed) {
+            rejectedSizes.removeValue(forKey: windowId)
+            return
+        }
+
+        if let previous = rejectedSizes[windowId],
+           sizesAreEffectivelyEqual(previous.requested, requested),
+           sizesAreEffectivelyEqual(previous.observed, observed)
+        {
+            rejectedSizes[windowId] = RejectedWindowSize(
+                requested: requested,
+                observed: observed,
+                confirmations: min(previous.confirmations + 1, 2),
+            )
+        } else {
+            rejectedSizes[windowId] = RejectedWindowSize(
+                requested: requested,
+                observed: observed,
+                confirmations: 1,
+            )
+        }
+    }
+}
+
 @MainActor
 final class LayoutAnimator {
     static let shared = LayoutAnimator()
 
     private var animationTask: Task<Void, Never>?
     private var lastSubmittedTargets: [UInt32: LayoutFrameTarget]?
+    private var acceptanceTracker = LayoutFrameAcceptanceTracker()
     private var generation: UInt = 0
 
     private init() {}
@@ -67,7 +115,13 @@ final class LayoutAnimator {
 
         guard shouldAnimate else {
             applyImmediately(targets.values)
-            animationTask = nil
+            animationTask = Task.startUnstructured { @MainActor [weak self] in
+                guard let self else { return }
+                await verifyAcceptedSizes(Array(targets.values), generation: currentGeneration)
+                if generation == currentGeneration {
+                    animationTask = nil
+                }
+            }
             return
         }
 
@@ -83,8 +137,16 @@ final class LayoutAnimator {
     private func animate(_ targets: [LayoutFrameTarget], durationMs: Int) async {
         var animatedFrames: [AnimatedLayoutFrame] = []
 
-        for target in targets {
+        for originalTarget in targets {
             guard !Task.isCancelled else { return }
+            let target = LayoutFrameTarget(
+                window: originalTarget.window,
+                topLeft: originalTarget.topLeft,
+                size: acceptanceTracker.sizeToApply(
+                    windowId: originalTarget.window.windowId,
+                    requested: originalTarget.size,
+                ),
+            )
             guard let start = try? await target.window.getAxRect(.cancellable) else {
                 target.window.setAxFrame(target.topLeft, target.size)
                 continue
@@ -110,7 +172,12 @@ final class LayoutAnimator {
             animatedFrames.append(AnimatedLayoutFrame(target: target, start: start, end: end))
         }
 
-        guard !animatedFrames.isEmpty, !Task.isCancelled else { return }
+        guard !Task.isCancelled else { return }
+
+        if animatedFrames.isEmpty {
+            await verifyAcceptedSizes(targets, generation: generation)
+            return
+        }
 
         let duration = Double(durationMs) / 1000
         let startedAt = ProcessInfo.processInfo.systemUptime
@@ -133,11 +200,37 @@ final class LayoutAnimator {
         for frame in animatedFrames {
             frame.target.window.setAxFrame(frame.target.topLeft, frame.target.size)
         }
+        await verifyAcceptedSizes(targets, generation: generation)
     }
 
     private func applyImmediately(_ targets: Dictionary<UInt32, LayoutFrameTarget>.Values) {
         for target in targets {
-            target.window.setAxFrame(target.topLeft, target.size)
+            target.window.setAxFrame(
+                target.topLeft,
+                acceptanceTracker.sizeToApply(windowId: target.window.windowId, requested: target.size),
+            )
+        }
+    }
+
+    private func verifyAcceptedSizes(_ targets: [LayoutFrameTarget], generation expectedGeneration: UInt) async {
+        guard !targets.isEmpty else { return }
+        // Take two samples after AX has processed the final write. Requiring the
+        // same mismatch twice distinguishes a real application constraint from
+        // a delayed notification without waiting for another layout transaction.
+        for _ in 0 ..< 2 {
+            try? await Task.sleep(for: .milliseconds(34))
+            guard !Task.isCancelled, generation == expectedGeneration else { return }
+            for target in targets {
+                guard !Task.isCancelled, generation == expectedGeneration else { return }
+                guard let requested = target.size,
+                      let actual = try? await target.window.getAxRect(.cancellable)?.size
+                else { continue }
+                acceptanceTracker.observe(
+                    windowId: target.window.windowId,
+                    requested: requested,
+                    observed: actual,
+                )
+            }
         }
     }
 }
@@ -164,4 +257,8 @@ private func framesAreEffectivelyEqual(_ lhs: Rect, _ rhs: Rect) -> Bool {
         abs(lhs.topLeftY - rhs.topLeftY) < 0.5 &&
         abs(lhs.width - rhs.width) < 0.5 &&
         abs(lhs.height - rhs.height) < 0.5
+}
+
+private func sizesAreEffectivelyEqual(_ lhs: CGSize, _ rhs: CGSize) -> Bool {
+    abs(lhs.width - rhs.width) < 1 && abs(lhs.height - rhs.height) < 1
 }

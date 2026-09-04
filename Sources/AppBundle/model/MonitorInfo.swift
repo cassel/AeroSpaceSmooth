@@ -1,8 +1,10 @@
 import AppKit
+import ColorSync
 import Common
 
 private struct MonitorInfoImpl {
     let monitorAppKitNsScreenScreensId: Int
+    let stableIdentifier: String
     let name: String
     let rect: Rect
     let visibleRect: Rect
@@ -18,6 +20,9 @@ extension MonitorInfoImpl: MonitorInfo {
 protocol MonitorInfo: AeroAny {
     /// The index in NSScreen.screens array. 1-based index
     var monitorAppKitNsScreenScreensId: Int { get }
+    /// Persistent hardware identity. Unlike the AppKit screen index and display
+    /// name, this value survives monitor reordering and localized name changes.
+    var stableIdentifier: String { get }
     var name: String { get }
     var rect: Rect { get }
     var visibleRect: Rect { get }
@@ -29,6 +34,7 @@ protocol MonitorInfo: AeroAny {
 final class LazyMonitorInfo: MonitorInfo {
     private let screen: NSScreen
     let monitorAppKitNsScreenScreensId: Int
+    let stableIdentifier: String
     let name: String
     let width: CGFloat
     let height: CGFloat
@@ -38,6 +44,7 @@ final class LazyMonitorInfo: MonitorInfo {
 
     init(monitorAppKitNsScreenScreensId: Int, isMain: Bool, _ screen: NSScreen) {
         self.monitorAppKitNsScreenScreensId = monitorAppKitNsScreenScreensId
+        self.stableIdentifier = screen.stableDisplayIdentifier
         self.name = screen.localizedName
         self.width = screen.frame.width // Don't call rect because it would cause recursion during mainMonitor init
         self.height = screen.frame.height // Don't call rect because it would cause recursion during mainMonitor init
@@ -62,6 +69,7 @@ extension NSScreen {
     fileprivate func toMonitorInfo(monitorAppKitNsScreenScreensId: Int) -> MonitorInfo {
         MonitorInfoImpl(
             monitorAppKitNsScreenScreensId: monitorAppKitNsScreenScreensId,
+            stableIdentifier: stableDisplayIdentifier,
             name: localizedName,
             rect: rect,
             visibleRect: visibleRect,
@@ -71,6 +79,20 @@ extension NSScreen {
 
     fileprivate var isMainScreen: Bool {
         frame.minX == 0 && frame.minY == 0
+    }
+
+    fileprivate var stableDisplayIdentifier: String {
+        let screenNumberKey = NSDeviceDescriptionKey("NSScreenNumber")
+        guard let screenNumber = deviceDescription[screenNumberKey] as? NSNumber,
+              let unmanagedUuid = unsafe CGDisplayCreateUUIDFromDisplayID(screenNumber.uint32Value)
+        else {
+            // Virtual displays do not always expose a Core Graphics UUID. The
+            // fallback is deliberately explicit so it can be migrated later if
+            // the display starts reporting a hardware identity.
+            return "name:\(localizedName)"
+        }
+        let uuid = unsafe unmanagedUuid.takeRetainedValue()
+        return (CFUUIDCreateString(nil, uuid) as String).lowercased()
     }
 
     /// The property is a replacement for Apple's crazy ``frame``
@@ -88,6 +110,7 @@ extension NSScreen {
 private let testMonitorInfoRect = Rect(topLeftX: 0, topLeftY: 0, width: 1920, height: 1080)
 private let testMonitorInfo = MonitorInfoImpl(
     monitorAppKitNsScreenScreensId: 1,
+    stableIdentifier: "test-monitor",
     name: "Test Monitor",
     rect: testMonitorInfoRect,
     visibleRect: testMonitorInfoRect,
