@@ -122,6 +122,66 @@ final class FocusCommandTest: XCTestCase {
         assertEquals(focus.windowOrNil?.windowId, 3)
     }
 
+    func testConcurrentFocusCommandsIgnoreFloatingWindowsMovedWhileReadingGeometry() async {
+        let workspace = Workspace.get(byName: name)
+        let targetRect = Rect(topLeftX: 0, topLeftY: 0, width: 100, height: 100)
+        let targetReadGate = AsyncTestGate()
+        let secondFloatingReadGate = AsyncTestGate()
+        var targetReadCount = 0
+        var secondFloatingReadCount = 0
+
+        let target = TestWindow.new(
+            id: 1,
+            parent: workspace.rootTilingContainer,
+            rect: targetRect,
+            getAxRectForTest: {
+                targetReadCount += 1
+                if targetReadCount <= 2 { await targetReadGate.wait() }
+                return targetRect
+            },
+        )
+        target.lastAppliedLayoutVirtualRect = targetRect
+
+        let firstFloating = TestWindow.new(
+            id: 2,
+            parent: workspace.floatingWindowsContainer,
+            rect: Rect(topLeftX: 10, topLeftY: 10, width: 20, height: 20),
+        )
+        TestWindow.new(
+            id: 3,
+            parent: workspace.floatingWindowsContainer,
+            rect: Rect(topLeftX: 20, topLeftY: 20, width: 20, height: 20),
+            getAxRectForTest: {
+                secondFloatingReadCount += 1
+                if secondFloatingReadCount <= 2 { await secondFloatingReadGate.wait() }
+                return Rect(topLeftX: 20, topLeftY: 20, width: 20, height: 20)
+            },
+        )
+        assertEquals(firstFloating.focusWindow(), true)
+
+        let firstFocus = Task.startUnstructured { @MainActor in
+            _ = await parseCommand("focus right").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        }
+        await targetReadGate.waitForWaiterCount(1)
+
+        let secondFocus = Task.startUnstructured { @MainActor in
+            _ = await parseCommand("focus right").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        }
+        await targetReadGate.waitForWaiterCount(2)
+
+        targetReadGate.releaseFirst()
+        await secondFloatingReadGate.waitForWaiterCount(1)
+        XCTAssertNil(firstFloating.parent)
+
+        targetReadGate.releaseFirst()
+        await secondFloatingReadGate.waitForWaiterCount(2)
+        secondFloatingReadGate.releaseAll()
+
+        _ = await firstFocus.value
+        _ = await secondFocus.value
+        assertEquals(workspace.floatingWindows.map(\.windowId).sorted(), [2, 3])
+    }
+
     func testFocusAlongTheContainerOrientation() async {
         Workspace.get(byName: name).rootTilingContainer.apply {
             assertEquals(TestWindow.new(id: 1, parent: $0).focusWindow(), true)
@@ -281,5 +341,32 @@ final class FocusCommandTest: XCTestCase {
 
         assertEquals(await parseCommand("focus --boundaries-action wrap-around-the-workspace dfs-next").cmdOrDie.run(.defaultEnv, .emptyStdin).exitCode.rawValue, 0)
         assertEquals(focus.windowOrNil?.windowId, 1)
+    }
+}
+
+@MainActor
+private final class AsyncTestGate {
+    private var totalWaiterCount = 0
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        await withCheckedContinuation { continuation in
+            totalWaiterCount += 1
+            waiters.append(continuation)
+        }
+    }
+
+    func waitForWaiterCount(_ expectedCount: Int) async {
+        while totalWaiterCount < expectedCount { await Task.yield() }
+    }
+
+    func releaseFirst() {
+        waiters.removeFirst().resume()
+    }
+
+    func releaseAll() {
+        let waiters = self.waiters
+        self.waiters.removeAll()
+        for waiter in waiters { waiter.resume() }
     }
 }

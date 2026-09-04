@@ -155,6 +155,9 @@ struct FocusCommand: Command {
             tilingParent = workspace.rootTilingContainer
         }
 
+        // AX reads above are suspension points. Another focus command may have
+        // temporarily moved this window while this command was suspended.
+        guard window.parent === workspace.floatingWindowsContainer else { continue }
         let data = window.unbindFromParent()
         let floatingWindowData = FloatingWindowData(
             window: window,
