@@ -113,6 +113,7 @@ private struct SmoothLayoutSettingsView: View {
     @ObservedObject private var conflictMonitor = WindowManagerConflictMonitor.shared
     @ObservedObject private var manualLayouts = PersistentManualLayoutStore.shared
     @ObservedObject private var updateChecker = UpdateChecker.shared
+    @ObservedObject private var workspaceBar = WorkspaceBarSettings.shared
     @State private var selection: SmoothSettingsSection = .layouts
     @State private var scratchpadStatus = ""
 
@@ -257,6 +258,28 @@ private struct SmoothLayoutSettingsView: View {
                     }
                     .disabled(updateChecker.status == .checking)
                 }
+            }
+
+            SettingsCard(
+                "Workspace Bar",
+                systemImage: "rectangle.topthird.inset.filled",
+                help: "Shows a compact clickable workspace strip below the menu bar on each display. It follows the monitor's active workspace and stays available across macOS Spaces.",
+            ) {
+                Toggle(
+                    "Show workspace bar on every display",
+                    isOn: Binding(
+                        get: { workspaceBar.isEnabled },
+                        set: { workspaceBar.setEnabled($0) },
+                    ),
+                )
+                Toggle(
+                    "Include empty workspaces",
+                    isOn: Binding(
+                        get: { workspaceBar.showsEmptyWorkspaces },
+                        set: { workspaceBar.setShowsEmptyWorkspaces($0) },
+                    ),
+                )
+                .disabled(!workspaceBar.isEnabled)
             }
         }
     }
@@ -473,6 +496,23 @@ private struct SmoothLayoutSettingsView: View {
             title: "Shortcuts",
             subtitle: "All key bindings from the main and service modes.",
         ) {
+            SettingsCard(
+                "Quick Tools",
+                systemImage: "command",
+                help: "Overview shows every workspace and window. Command Palette searches common actions. Both are also regular commands, so any user can assign them to a key in Main Mode.",
+            ) {
+                HStack {
+                    Button("Open Overview") {
+                        WorkspaceNavigatorController.shared.show(.overview)
+                    }
+                    Button("Open Command Palette") {
+                        WorkspaceNavigatorController.shared.show(.commandPalette)
+                    }
+                }
+                Text("Example commands: ‘overview’ and ‘command-palette’")
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
             SettingsCard(
                 "Main Mode",
                 systemImage: "keyboard",

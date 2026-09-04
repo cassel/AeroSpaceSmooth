@@ -26,8 +26,20 @@ movement and a native Settings interface.
 - Configurable per-monitor window limits with overflow routed to another workspace
   on the same monitor.
 - Coordinated window animations with configurable duration and Reduce Motion support.
+- Detection of applications that repeatedly reject an animated size, preventing
+  resize feedback loops while still allowing their position to update.
+- Stable display profiles backed by hardware UUID, with migration from older
+  display-name profiles.
 - Automatic reflow after windows open, close, or move, while intentional manual
   `join-with` grouping remains stable until workspace membership changes.
+- Visual ordered application rules for layout, title matching, workspace routing,
+  and scratchpads; monitor-relative workspace slots; and ten multi-window scratchpads.
+- Manual-layout restoration, conflicting window-manager detection, and an opt-in
+  per-display workspace bar.
+- A searchable workspace/window Overview and Command Palette, both available as
+  menu actions and bindable commands.
+- Configurable daily update checks against this fork's public GitHub releases; the
+  app never downloads or installs an update automatically.
 - Comment-preserving TOML updates, preview, validation, reload, and visual shortcut editing.
 
 Read the complete [AeroSpaceSmooth feature and Settings guide](./AEROSPACE_SMOOTH.md)

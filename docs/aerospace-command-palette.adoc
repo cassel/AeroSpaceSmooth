@@ -1,0 +1,27 @@
+= aerospace-command-palette(1)
+include::util/man-attributes.adoc[]
+:manname: aerospace-command-palette
+// tag::purpose[]
+:manpurpose: Open the searchable command palette
+// end::purpose[]
+
+== Synopsis
+[verse]
+// tag::synopsis[]
+aerospace command-palette [-h|--help]
+
+// end::synopsis[]
+
+== Description
+
+// tag::body[]
+Opens a searchable palette containing common window actions, workspace navigation and scratchpad toggles.
+
+== Options
+include::./util/conditional-options-header.adoc[]
+
+-h, --help:: Print help
+
+// end::body[]
+
+include::util/man-footer.adoc[]

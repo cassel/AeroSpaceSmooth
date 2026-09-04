@@ -14,6 +14,18 @@ public func menuBar(viewModel: TrayMenuModel) -> some Scene { // todo should it 
 
         if viewModel.axPermissionStatus == .granted {
             OpenSmoothLayoutSettingsButton()
+            Button {
+                WorkspaceNavigatorController.shared.show(.overview)
+            } label: {
+                Label("Overview…", systemImage: "rectangle.3.group")
+            }
+            .keyboardShortcut("O", modifiers: [.command, .shift])
+            Button {
+                WorkspaceNavigatorController.shared.show(.commandPalette)
+            } label: {
+                Label("Command Palette…", systemImage: "command")
+            }
+            .keyboardShortcut("P", modifiers: [.command, .shift])
             Divider()
             if let token: RunSessionGuard = .isServerEnabled, viewModel.lastReloadConfigContainedWarnings {
                 Button {

@@ -22,6 +22,10 @@ layout coordinator. It is not affiliated with or supported by the upstream autho
 Upstream documentation remains the authoritative reference for standard AeroSpace
 commands and configuration semantics.
 
+New features in this fork are implemented independently against the existing
+AeroSpace interfaces and publicly described behavior. No source code from other
+window-manager projects is incorporated.
+
 ## Main design goals
 
 The work in this fork follows these principles:
@@ -60,6 +64,9 @@ The current branch was built incrementally rather than as one isolated UI patch:
 | Workspace resilience | Reconciliation of malformed trees, monitor reconnect profile persistence, and safer hidden-workspace positioning. |
 | Constraint handling | Selected Dwindle/Custom topology remains authoritative even when an application has a large minimum size. |
 | Manual grouping | Service-mode `join-with` edits survive normalization and automatic reconciliation until membership changes. |
+| Everyday workspace tools | UUID-backed monitor profiles, monitor-relative slots, multi-window scratchpads, manual tree restoration, and a clickable workspace bar. |
+| Visual navigation | Searchable Overview and Command Palette, exposed through the menu and bindable CLI commands. |
+| Operational safety | Detection of competing window managers and daily checks for public releases without automatic installation. |
 
 ## Opening Settings
 
@@ -107,9 +114,9 @@ the General page:
 ## Layouts
 
 Layouts is the main AeroSpaceSmooth-specific page. It detects the currently connected
-monitors and gives each monitor an independent profile. A profile is stored by monitor
-name so disconnecting and reconnecting a display does not intentionally reset its
-layout choices.
+monitors and gives each monitor an independent profile. A profile is stored by the
+Core Graphics display UUID, so a localized display-name change or screen reordering
+does not reset its layout choices. Existing name-based profiles migrate automatically.
 
 The monitor list shows:
 
@@ -266,12 +273,51 @@ The animation coordinator cancels obsolete work when a newer layout transaction
 arrives. It also avoids treating its own intermediate Accessibility events as a reason
 to restart the same movement indefinitely.
 
+When an application repeatedly accepts the requested position but rejects the same
+requested size, the coordinator verifies the mismatch and records that constraint.
+Later layouts stop resending that ineffective size while continuing to move the window,
+which prevents shaking and repeated Accessibility traffic.
+
+### Window-manager conflicts, updates, and workspace bar
+
+At startup AeroSpaceSmooth checks for other known window managers, including another
+AeroSpaceSmooth instance, AeroSpace, OmniWM, Amethyst, and yabai. Settings also shows
+the live conflict state. The user can deliberately continue, but the default warning
+helps prevent two processes from fighting over the same windows.
+
+The Updates card can check this fork's latest public GitHub release once per day or on
+demand. It only reports availability and opens the release page; it never downloads or
+installs software automatically.
+
+The optional Workspace Bar creates a compact clickable strip on every connected display.
+It marks the active workspace, can include or hide empty workspaces, and remains visible
+across macOS Spaces.
+
 ## Workspaces
 
 ### Persistent Workspaces
 
 Persistent workspace names remain available even when empty. This keeps keyboard
 navigation and monitor ownership predictable.
+
+### Monitor-relative slots
+
+Each UUID-backed monitor profile has ten optional workspace slots. The commands
+`workspace monitor N` and `move-node-to-workspace monitor N` resolve the same shortcut
+through the currently focused monitor. Empty mappings fall back to the monitor's
+workspaces in natural order.
+
+### Scratchpads and manual layout restoration
+
+Ten scratchpad slots can each hold multiple floating windows. Use `scratchpad assign N`
+for the focused window and `scratchpad toggle N` to show or hide every window in the slot
+over the current workspace. The same actions are available in Settings and visual app
+rules.
+
+When automatic layout is disabled for a monitor, AeroSpaceSmooth records the tiling
+tree's groups, orientations, order, and weights. On relaunch it restores a saved tree
+only when the same workspace, display UUID, and complete set of windows can be matched,
+so a partial startup cannot overwrite the user's current arrangement.
 
 ### Workspace Monitor Assignment
 
@@ -295,7 +341,9 @@ bottom, top, and right edges.
 ## Applications
 
 The Applications page includes a visual application picker for choosing whether new
-windows from a particular application open as **Floating** or **Tiled**. The picker
+windows from a particular application open as **Floating** or **Tiled**. A visual rule
+can also match a title substring, route to a workspace, assign a scratchpad, and be
+reordered to control priority. The picker
 discovers installed and currently running apps, displays their names and icons, and
 stores the bundle identifier automatically. **Choose Other…** can select an `.app`
 bundle that was not discovered.
@@ -306,8 +354,8 @@ continue evaluating later callbacks, allowing an application layout choice to co
 with an advanced rule such as moving the same window to a workspace. Existing windows
 must be reopened after saving for a new detection rule to take effect.
 
-The Advanced Window Detection Rules card exposes the underlying conditions and command
-lists for cases that need title matching or multiple actions.
+The Advanced Window Detection Rules card retains raw conditions and command lists for
+cases that are not representable by the visual editor.
 
 Avoid using application identity as a substitute for workspace ownership unless that is
 intentional. A broad rule can make the same browser window appear to jump monitors when
@@ -334,6 +382,16 @@ Mode** bindings. Each shortcut may run one command or a command chain.
 
 The visual editor writes the normal AeroSpace key notation. In TOML, `alt` corresponds
 to the macOS Option key.
+
+The Quick Tools card and menu-bar menu open two native navigation surfaces:
+
+- `overview` searches monitors, workspaces, applications, and window titles; selecting
+  a card focuses the target.
+- `command-palette` searches common layout, focus, move, workspace, scratchpad, reload,
+  and enable actions.
+
+Both names are regular AeroSpaceSmooth commands and can be entered directly in the
+visual shortcut editor, for example `alt-space = 'command-palette'`.
 
 ### Example Omarchy-style bindings
 
@@ -419,6 +477,8 @@ Important consequences:
 - A window must be moved to the target workspace before it can join one of its nodes.
 - Window limits are evaluated per monitor profile and workspace.
 - Monitor names in assignments must match macOS names.
+- Layout profiles and monitor-relative slots use stable display UUIDs even when an
+  assignment still uses the standard AeroSpace monitor-name syntax.
 - A fallback monitor keeps workspaces accessible while displays are disconnected.
 
 ## What belongs to the fork and what remains local
@@ -431,6 +491,9 @@ Included in this repository:
 - Smooth coordinated layout transactions.
 - Automatic reconciliation and manual grouping preservation.
 - Visual TOML editing and its tests.
+- Stable monitor identity, constraint-aware animation, scratchpads, manual tree
+  restoration, the workspace bar, Overview, Command Palette, conflict detection,
+  and update checks.
 - The `AeroSpaceSmooth` development app name.
 
 Normally local to each user's Mac:
@@ -489,6 +552,10 @@ The main implementation entry points are:
 | Custom split-tree model | [`Sources/AppBundle/layout/SmoothCustomLayout.swift`](./Sources/AppBundle/layout/SmoothCustomLayout.swift) |
 | Automatic layout reconciliation | [`Sources/AppBundle/layout/SmoothWorkspaceLayout.swift`](./Sources/AppBundle/layout/SmoothWorkspaceLayout.swift) |
 | Coordinated frame animation | [`Sources/AppBundle/layout/LayoutAnimation.swift`](./Sources/AppBundle/layout/LayoutAnimation.swift) |
+| Manual layout persistence | [`Sources/AppBundle/layout/PersistentManualLayouts.swift`](./Sources/AppBundle/layout/PersistentManualLayouts.swift) |
+| Workspace bar | [`Sources/AppBundle/ui/WorkspaceBar.swift`](./Sources/AppBundle/ui/WorkspaceBar.swift) |
+| Overview and command palette | [`Sources/AppBundle/ui/WorkspaceNavigator.swift`](./Sources/AppBundle/ui/WorkspaceNavigator.swift) |
+| Conflict and update checks | [`Sources/AppBundle/WindowManagerConflictDetector.swift`](./Sources/AppBundle/WindowManagerConflictDetector.swift), [`Sources/AppBundle/UpdateChecker.swift`](./Sources/AppBundle/UpdateChecker.swift) |
 | Comment-preserving TOML model | [`Sources/AppBundle/config/VisualConfigSettings.swift`](./Sources/AppBundle/config/VisualConfigSettings.swift) |
 | Manual grouping integration | [`Sources/AppBundle/command/impl/JoinWithCommand.swift`](./Sources/AppBundle/command/impl/JoinWithCommand.swift) |
 | Layout and persistence tests | [`Sources/AppBundleTests/layout`](./Sources/AppBundleTests/layout) |
@@ -499,8 +566,9 @@ The main implementation entry points are:
 - This is an experimental source build, not a notarized public release.
 - The visual editor covers the settings implemented by the current fork, while the
   upstream CLI and TOML remain necessary for less common AeroSpace features.
-- Layout profiles are keyed by the monitor name reported by macOS.
 - Custom layouts describe binary split trees; they are not free-form overlapping canvases.
+- Overview uses application icons and live window metadata rather than capturing window
+  contents, avoiding Screen Recording permission.
 - `join-with` groups AeroSpace tree nodes, not native macOS window tabs.
 - Automatic layouts intentionally become authoritative again when workspace membership
   changes.

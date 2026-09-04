@@ -10,6 +10,9 @@ let close_all_windows_but_current_help_generated = """
 let close_help_generated = """
     USAGE: close [-h|--help] [--quit-if-last-window] [--window-id <window-id>]
     """
+let command_palette_help_generated = """
+    USAGE: command-palette [-h|--help]
+    """
 let config_help_generated = """
     USAGE: config [-h|--help] --get <name> [--json] [--keys]
        OR: config [-h|--help] --major-keys
@@ -134,6 +137,9 @@ let move_help_generated = """
     USAGE: move [-h|--help] [--window-id <window-id>] [--boundaries <boundary>]
                 [--boundaries-action <boundary-action>] [--fail-if-fullscreen]
                 [--fail-if-macos-native-fullscreen] (left|down|up|right)
+    """
+let overview_help_generated = """
+    USAGE: overview [-h|--help]
     """
 let reload_config_help_generated = """
     USAGE: reload-config [-h|--help] [--no-gui] [--dry-run] [--warnings-as-errors]

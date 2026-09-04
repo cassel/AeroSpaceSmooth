@@ -1,0 +1,27 @@
+= aerospace-overview(1)
+include::util/man-attributes.adoc[]
+:manname: aerospace-overview
+// tag::purpose[]
+:manpurpose: Open the visual workspace and window overview
+// end::purpose[]
+
+== Synopsis
+[verse]
+// tag::synopsis[]
+aerospace overview [-h|--help]
+
+// end::synopsis[]
+
+== Description
+
+// tag::body[]
+Opens a searchable overview of displays, workspaces and windows. Selecting a workspace or window focuses it.
+
+== Options
+include::./util/conditional-options-header.adoc[]
+
+-h, --help:: Print help
+
+// end::body[]
+
+include::util/man-footer.adoc[]
