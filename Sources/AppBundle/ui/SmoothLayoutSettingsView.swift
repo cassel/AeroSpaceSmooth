@@ -114,8 +114,8 @@ private struct SmoothLayoutSettingsView: View {
     @ObservedObject private var manualLayouts = PersistentManualLayoutStore.shared
     @ObservedObject private var updateChecker = UpdateChecker.shared
     @ObservedObject private var workspaceBar = WorkspaceBarSettings.shared
+    @ObservedObject private var scratchpads = ScratchpadManager.shared
     @State private var selection: SmoothSettingsSection = .layouts
-    @State private var scratchpadStatus = ""
 
     var body: some View {
         HSplitView {
@@ -332,26 +332,20 @@ private struct SmoothLayoutSettingsView: View {
             SettingsCard(
                 "Scratchpads",
                 systemImage: "macwindow.on.rectangle",
-                help: "Each of the ten slots can hold multiple floating windows. Assign the focused window, then toggle that slot over the current workspace. You can bind the same actions with ‘scratchpad assign N’ and ‘scratchpad toggle N’.",
+                help: "Arm a slot, then click the window you want to capture. Each slot can hold multiple floating windows and show them over any workspace. Keyboard automation remains available with ‘scratchpad assign N’ and ‘scratchpad toggle N’.",
             ) {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(1 ... smoothWorkspaceSlotCount, id: \.self) { slot in
-                        HStack {
-                            Text("Slot \(slot)")
-                                .frame(width: 54, alignment: .leading)
-                            Text("\(ScratchpadManager.windowCount(slot: slot)) windows")
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Button("Assign Focused") { performScratchpad(.assign, slot: slot) }
-                            Button("Toggle") { performScratchpad(.toggle, slot: slot) }
-                        }
+                        scratchpadSlot(slot)
+                        if slot < smoothWorkspaceSlotCount { Divider() }
                     }
-                    if !scratchpadStatus.isEmpty {
-                        Text(scratchpadStatus)
+                    if !scratchpads.statusMessage.isEmpty {
+                        Text(scratchpads.statusMessage)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
+                .onAppear { scratchpads.refreshWindowItems(force: true) }
             }
 
             SettingsCard(
@@ -581,22 +575,56 @@ private struct SmoothLayoutSettingsView: View {
         .frame(height: 54)
     }
 
-    private func performScratchpad(_ action: ScratchpadAction, slot: Int) {
+    @ViewBuilder
+    private func scratchpadSlot(_ slot: Int) -> some View {
+        let items = scratchpads.items(in: slot)
+        VStack(alignment: .leading, spacing: 7) {
+            HStack {
+                Text("Slot \(slot)")
+                    .fontWeight(.semibold)
+                    .frame(width: 54, alignment: .leading)
+                Text("\(items.count) \(items.count == 1 ? "window" : "windows")")
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if scratchpads.armedSlot == slot {
+                    Button("Cancel Capture") { scratchpads.cancelCapture() }
+                } else {
+                    Button("Capture Next Window…") { scratchpads.beginCapture(for: slot) }
+                        .disabled(scratchpads.armedSlot != nil)
+                }
+                Button(scratchpads.isPresented(slot: slot, on: focus.workspace) ? "Hide" : "Show") {
+                    toggleScratchpad(slot)
+                }
+                .disabled(items.isEmpty)
+            }
+
+            if scratchpads.armedSlot == slot {
+                Label("Now click the window you want to add to this slot.", systemImage: "scope")
+                    .font(.caption)
+                    .foregroundStyle(.blue)
+            }
+
+            ForEach(items) { item in
+                ScratchpadWindowRow(item: item) {
+                    scratchpads.remove(windowId: item.id, from: slot)
+                }
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func toggleScratchpad(_ slot: Int) {
         guard let token: RunSessionGuard = .isServerEnabled else {
-            scratchpadStatus = "Window management is disabled."
+            scratchpads.cancelCapture()
             return
         }
         Task.startUnstructured { @MainActor in
             try await runLightSession(.menuBarButton, token) {
-                let parsed = parseCommand(["scratchpad", action.rawValue, String(slot)])
+                let parsed = parseCommand(["scratchpad", "toggle", String(slot)])
                 guard let command = parsed.cmdOrNil else {
-                    scratchpadStatus = "Could not parse the scratchpad command."
                     return
                 }
-                let result = await command.run(.defaultEnv, .emptyStdin)
-                scratchpadStatus = result.exitCode.rawValue == 0
-                    ? "Scratchpad \(slot): \(action.rawValue) complete."
-                    : result.stderr.joined(separator: " ")
+                _ = await command.run(.defaultEnv, .emptyStdin)
             }
         }
     }
@@ -621,6 +649,45 @@ private struct SmoothLayoutSettingsView: View {
                     .foregroundStyle(.red)
                     .lineLimit(2)
         }
+    }
+}
+
+@MainActor
+private struct ScratchpadWindowRow: View {
+    let item: ScratchpadWindowItem
+    let onRemove: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(nsImage: applicationIcon)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 26, height: 26)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(item.title)
+                    .lineLimit(1)
+                Text(item.applicationName)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text(item.isPresented ? "Visible" : "Hidden")
+                .font(.caption)
+                .foregroundStyle(item.isPresented ? .green : .secondary)
+            Button(role: .destructive, action: onRemove) {
+                Image(systemName: "trash")
+            }
+            .buttonStyle(.borderless)
+            .help("Remove this window from the scratchpad")
+        }
+        .padding(.leading, 64)
+    }
+
+    private var applicationIcon: NSImage {
+        item.applicationPath
+            .map { NSWorkspace.shared.icon(forFile: $0) }
+            ?? NSImage(systemSymbolName: "macwindow", accessibilityDescription: nil)
+            ?? NSImage()
     }
 }
 

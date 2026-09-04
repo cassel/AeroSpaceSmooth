@@ -309,10 +309,12 @@ workspaces in natural order.
 
 ### Scratchpads and manual layout restoration
 
-Ten scratchpad slots can each hold multiple floating windows. Use `scratchpad assign N`
-for the focused window and `scratchpad toggle N` to show or hide every window in the slot
-over the current workspace. The same actions are available in Settings and visual app
-rules.
+Ten scratchpad slots can each hold multiple floating windows. In Settings, choose
+**Capture Next Window…** and then click the desired window. The slot lists every captured
+application and title, reports whether it is visible or hidden, and allows individual
+removal. **Show** and **Hide** move the complete slot over the current workspace or back
+to its hidden workspace. Automation and visual app rules can still use
+`scratchpad assign N` and `scratchpad toggle N`.
 
 When automatic layout is disabled for a monitor, AeroSpaceSmooth records the tiling
 tree's groups, orientations, order, and weights. On relaunch it restores a saved tree

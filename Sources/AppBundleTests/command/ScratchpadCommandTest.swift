@@ -47,4 +47,26 @@ final class ScratchpadCommandTest: XCTestCase {
         assertEquals(result.exitCode.rawValue, 2)
         assertTrue(result.stderr.first?.contains("scratchpad assign 7") == true)
     }
+
+    func testRemovingHiddenWindowReturnsItToCurrentWorkspace() async {
+        let workspace = focus.workspace
+        let window = TestWindow.new(id: 11, parent: workspace.rootTilingContainer)
+        _ = await parseCommand("scratchpad --window-id 11 assign 3").cmdOrDie.run(.defaultEnv, .emptyStdin)
+
+        ScratchpadManager.shared.remove(windowId: 11, from: 3)
+
+        XCTAssertNil(window.scratchpadSlot)
+        assertEquals(window.nodeWorkspace, workspace)
+        assertTrue(window.isFloating)
+        assertTrue(ScratchpadManager.shared.items(in: 3).isEmpty)
+    }
+
+    func testCaptureCanBeArmedAndCancelled() {
+        ScratchpadManager.shared.beginCapture(for: 6)
+        assertEquals(ScratchpadManager.shared.armedSlot, 6)
+
+        ScratchpadManager.shared.cancelCapture()
+
+        XCTAssertNil(ScratchpadManager.shared.armedSlot)
+    }
 }

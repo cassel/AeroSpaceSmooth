@@ -120,6 +120,7 @@ func refreshModel_nonCancellable() async {
         normalizeContainers()
         await reconcileSmoothWorkspaceLayoutsRespectingWindowConstraints()
     }
+    ScratchpadManager.shared.synchronizeAfterModelRefresh()
 }
 
 @MainActor

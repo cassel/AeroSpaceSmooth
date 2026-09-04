@@ -9,7 +9,15 @@ enum GlobalObserver {
             return
         }
         let notifName = notification.name.rawValue
+        let activatedApplicationPid = (notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?
+            .processIdentifier
         Task.startUnstructured { @MainActor in
+            if notifName == NSWorkspace.didActivateApplicationNotification.rawValue,
+               activatedApplicationPid != nil,
+               activatedApplicationPid != myPid
+            {
+                ScratchpadManager.shared.noteExternalSelection()
+            }
             if notifName == NSWorkspace.didLaunchApplicationNotification.rawValue ||
                 notifName == NSWorkspace.didTerminateApplicationNotification.rawValue
             {
@@ -79,6 +87,7 @@ enum GlobalObserver {
             //  resetManipulatedWithMouseIfPossible might call its own refreshSession
             //  The end of the callback calls refreshSession
             Task.startUnstructured { @MainActor in
+                ScratchpadManager.shared.noteExternalSelection()
                 guard let token: RunSessionGuard = .isServerEnabled else { return }
                 try await resetManipulatedWithMouseIfPossible()
                 let mouseLocation = mouseLocation
