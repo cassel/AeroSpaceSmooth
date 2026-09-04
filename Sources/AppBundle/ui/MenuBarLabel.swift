@@ -3,10 +3,26 @@ import SwiftUI
 
 @MainActor
 struct MenuBarLabel: View {
+    @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject var viewModel: TrayMenuModel
     @ObservedObject private var appearance = MenuBarAppearanceSettings.shared
 
     var body: some View {
+        if #available(macOS 14, *), let cgImage = renderedMenuBarImage {
+            Image(cgImage, scale: 2, label: Text(accessibilityText))
+        } else {
+            menuBarContent
+        }
+    }
+
+    @available(macOS 14, *)
+    private var renderedMenuBarImage: CGImage? {
+        let renderer = ImageRenderer(content: menuBarContent)
+        renderer.scale = 2
+        return renderer.cgImage
+    }
+
+    private var menuBarContent: some View {
         HStack(spacing: 4) {
             Image(systemName: "rectangle.3.group")
                 .symbolRenderingMode(.monochrome)
@@ -14,8 +30,13 @@ struct MenuBarLabel: View {
             presentationContent
         }
         .font(.system(size: 13, weight: .semibold))
+        .foregroundStyle(renderColor)
         .opacity(viewModel.isEnabled ? 1 : 0.55)
         .accessibilityLabel(accessibilityText)
+    }
+
+    private var renderColor: Color {
+        colorScheme == .dark ? .white : .black
     }
 
     @ViewBuilder
@@ -38,7 +59,7 @@ struct MenuBarLabel: View {
                 }
                 if !visible.isEmpty, !hiddenOccupied.isEmpty {
                     Text("|")
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(renderColor.opacity(0.35))
                 }
                 ForEach(hiddenOccupied, id: \.name) { workspace in
                     workspaceChip(workspace, isDimmed: true)
@@ -64,7 +85,7 @@ struct MenuBarLabel: View {
         .padding(.vertical, 1)
         .background {
             if workspace.isFocused {
-                Capsule().fill(.primary.opacity(0.16))
+                Capsule().fill(renderColor.opacity(0.16))
             }
         }
         .opacity(isDimmed ? 0.5 : 1)
