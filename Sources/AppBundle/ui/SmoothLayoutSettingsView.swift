@@ -1,4 +1,6 @@
+import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 let smoothLayoutSettingsWindowId = "aerospace-smooth-layout-settings"
 
@@ -257,12 +259,20 @@ private struct SmoothLayoutSettingsView: View {
     private var applicationsPage: some View {
         SettingsPage(
             title: "Applications",
-            subtitle: "Rules that run when a new application window is detected.",
+            subtitle: "Choose how application windows enter the AeroSpace layout.",
         ) {
             SettingsCard(
-                "Window Detection Rules",
+                "Application Window Layout",
+                systemImage: "macwindow.badge.plus",
+                help: "Selected applications open as floating or tiled. AeroSpaceSmooth identifies each application automatically and stores the choice as a standard on-window-detected rule.",
+            ) {
+                ApplicationLayoutRulesEditor(rules: $configSettings.draft.windowRules)
+            }
+
+            SettingsCard(
+                "Advanced Window Detection Rules",
                 systemImage: "arrowshape.turn.up.right.circle",
-                help: "Each rule tests window properties such as bundle identifier or title, then runs one or more AeroSpace commands for matching windows.",
+                help: "Advanced rules can test bundle identifiers, titles and other window properties, then run one or more AeroSpace commands. Simple application layout choices are managed in the card above.",
             ) {
                 WindowRulesEditor(rules: $configSettings.draft.windowRules)
             }
@@ -587,27 +597,333 @@ private struct WorkspaceAssignmentsEditor: View {
     }
 }
 
+@MainActor
+private struct ApplicationLayoutRulesEditor: View {
+    @Binding var rules: [VisualWindowRule]
+    @State private var isApplicationPickerPresented = false
+
+    private var applicationRules: [VisualWindowRule] {
+        rules.filter { $0.applicationLayout != nil }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if applicationRules.isEmpty {
+                Text("No application-specific layout choices yet.")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(applicationRules) { rule in
+                    if let applicationLayout = rule.applicationLayout {
+                        ApplicationLayoutRuleRow(
+                            application: .resolve(bundleIdentifier: applicationLayout.bundleIdentifier),
+                            layout: layoutBinding(for: rule.id),
+                            onRemove: { rules.removeAll { $0.id == rule.id } },
+                        )
+                    }
+                }
+            }
+
+            Button {
+                isApplicationPickerPresented = true
+            } label: {
+                Label("Add Application…", systemImage: "plus")
+            }
+            .sheet(isPresented: $isApplicationPickerPresented) {
+                ApplicationPicker(
+                    excludedBundleIdentifiers: Set(applicationRules.compactMap { $0.applicationLayout?.bundleIdentifier }),
+                    onSelect: addApplication,
+                )
+            }
+            Text("Layout choices apply when an application creates a new window. Reopen existing windows after saving to apply the new choice.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func layoutBinding(for ruleId: UUID) -> Binding<VisualApplicationWindowLayout> {
+        Binding(
+            get: {
+                rules.first(where: { $0.id == ruleId })?.applicationLayout?.layout ?? .floating
+            },
+            set: { layout in
+                guard let index = rules.firstIndex(where: { $0.id == ruleId }) else { return }
+                rules[index].commands = [layout.command]
+            },
+        )
+    }
+
+    private func addApplication(_ application: VisualApplicationChoice) {
+        guard !rules.contains(where: { $0.applicationLayout?.bundleIdentifier == application.bundleIdentifier }) else { return }
+        rules.insert(
+            VisualWindowRule(applicationBundleIdentifier: application.bundleIdentifier, layout: .floating),
+            at: 0,
+        )
+    }
+}
+
+@MainActor
+private struct ApplicationLayoutRuleRow: View {
+    let application: VisualApplicationChoice
+    @Binding var layout: VisualApplicationWindowLayout
+    let onRemove: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(nsImage: application.icon)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 34, height: 34)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(application.name)
+                Text(application.bundleIdentifier)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+            Spacer(minLength: 12)
+            Picker("Window layout", selection: $layout) {
+                ForEach(VisualApplicationWindowLayout.allCases) { layout in
+                    Text(layout.title).tag(layout)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .frame(width: 170)
+            RemoveRowButton(action: onRemove)
+        }
+        .padding(10)
+        .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 9))
+    }
+}
+
+@MainActor
+private struct ApplicationPicker: View {
+    @Environment(\.dismiss) private var dismiss
+    let excludedBundleIdentifiers: Set<String>
+    let onSelect: (VisualApplicationChoice) -> Void
+
+    @State private var applications: [VisualApplicationChoice] = []
+    @State private var searchText = ""
+    @State private var isLoading = true
+
+    private var filteredApplications: [VisualApplicationChoice] {
+        applications.filter { application in
+            !excludedBundleIdentifiers.contains(application.bundleIdentifier) &&
+                (searchText.isEmpty || application.name.localizedCaseInsensitiveContains(searchText) ||
+                    application.bundleIdentifier.localizedCaseInsensitiveContains(searchText))
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Choose an Application")
+                    .font(.title2.bold())
+                HStack {
+                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                    TextField("Search applications", text: $searchText)
+                        .textFieldStyle(.plain)
+                }
+                .padding(.horizontal, 10)
+                .frame(height: 34)
+                .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
+            }
+            .padding(18)
+
+            Divider()
+
+            if isLoading {
+                Spacer()
+                ProgressView("Finding applications…")
+                Spacer()
+            } else if filteredApplications.isEmpty {
+                Spacer()
+                VStack(spacing: 8) {
+                    Image(systemName: "app.dashed")
+                        .font(.system(size: 32))
+                        .foregroundStyle(.secondary)
+                    Text(searchText.isEmpty ? "No More Applications" : "No Applications Found")
+                        .font(.headline)
+                    Text(searchText.isEmpty ? "Every discovered application already has a layout choice." : "Try a different name or bundle identifier.")
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            } else {
+                List(filteredApplications) { application in
+                    Button {
+                        select(application)
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(nsImage: application.icon)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(width: 32, height: 32)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(application.name)
+                                    .foregroundStyle(.primary)
+                                Text(application.bundleIdentifier)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+                .listStyle(.inset)
+            }
+
+            Divider()
+            HStack {
+                Button("Choose Other…", action: chooseOtherApplication)
+                Spacer()
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+            }
+            .padding(14)
+        }
+        .frame(width: 560, height: 620)
+        .task {
+            let runningApplicationURLs = NSWorkspace.shared.runningApplications.compactMap(\.bundleURL)
+            applications = VisualApplicationChoice.discover(including: runningApplicationURLs)
+            isLoading = false
+        }
+    }
+
+    private func select(_ application: VisualApplicationChoice) {
+        onSelect(application)
+        dismiss()
+    }
+
+    private func chooseOtherApplication() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose an Application"
+        panel.prompt = "Choose"
+        panel.directoryURL = URL(fileURLWithPath: "/Applications", isDirectory: true)
+        panel.allowedContentTypes = [.applicationBundle]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.treatsFilePackagesAsDirectories = false
+        guard panel.runModal() == .OK, let url = panel.url, let application = VisualApplicationChoice(bundleURL: url) else { return }
+        select(application)
+    }
+}
+
+private struct VisualApplicationChoice: Identifiable, Sendable {
+    let bundleIdentifier: String
+    let name: String
+    let bundleURL: URL?
+
+    var id: String { bundleIdentifier }
+
+    init?(bundleURL: URL) {
+        guard let bundle = Bundle(url: bundleURL), let bundleIdentifier = bundle.bundleIdentifier else { return nil }
+        self.bundleIdentifier = bundleIdentifier
+        self.name = (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String) ??
+            (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String) ??
+            bundleURL.deletingPathExtension().lastPathComponent
+        self.bundleURL = bundleURL
+    }
+
+    private init(bundleIdentifier: String, name: String, bundleURL: URL?) {
+        self.bundleIdentifier = bundleIdentifier
+        self.name = name
+        self.bundleURL = bundleURL
+    }
+
+    @MainActor
+    static func resolve(bundleIdentifier: String) -> Self {
+        if let bundleURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier),
+           let application = Self(bundleURL: bundleURL)
+        {
+            return application
+        }
+        return Self(bundleIdentifier: bundleIdentifier, name: bundleIdentifier, bundleURL: nil)
+    }
+
+    static func discover(including additionalURLs: [URL]) -> [Self] {
+        let fileManager = FileManager.default
+        let roots = [
+            URL(fileURLWithPath: "/Applications", isDirectory: true),
+            URL(fileURLWithPath: "/System/Applications", isDirectory: true),
+            URL(fileURLWithPath: "/System/Library/CoreServices/Applications", isDirectory: true),
+            fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Applications", isDirectory: true),
+        ]
+        var applicationURLs = additionalURLs
+        for root in roots {
+            guard let enumerator = fileManager.enumerator(
+                at: root,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles, .skipsPackageDescendants],
+            ) else { continue }
+            applicationURLs += enumerator.compactMap { $0 as? URL }.filter { $0.pathExtension == "app" }
+        }
+
+        var applicationsByBundleIdentifier: [String: Self] = [:]
+        for url in applicationURLs {
+            guard let application = Self(bundleURL: url), applicationsByBundleIdentifier[application.bundleIdentifier] == nil else { continue }
+            applicationsByBundleIdentifier[application.bundleIdentifier] = application
+        }
+        return applicationsByBundleIdentifier.values.sorted {
+            $0.name.localizedStandardCompare($1.name) == .orderedAscending
+        }
+    }
+
+    @MainActor
+    var icon: NSImage {
+        if let bundleURL { return NSWorkspace.shared.icon(forFile: bundleURL.path) }
+        return NSImage(systemSymbolName: "app", accessibilityDescription: nil) ?? NSImage(size: NSSize(width: 32, height: 32))
+    }
+}
+
 private struct WindowRulesEditor: View {
     @Binding var rules: [VisualWindowRule]
 
+    private var advancedRuleIds: [UUID] {
+        rules.filter { $0.applicationLayout == nil }.map(\.id)
+    }
+
     var body: some View {
         VStack(spacing: 12) {
-            ForEach($rules) { $rule in
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("Condition").frame(width: 70, alignment: .leading)
-                        TextField("test %{app-bundle-id} = …", text: $rule.condition)
-                        RemoveRowButton { rules.removeAll { $0.id == rule.id } }
-                    }
-                    CommandListEditor(commands: $rule.commands)
+            if advancedRuleIds.isEmpty {
+                Text("No advanced window rules.")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(advancedRuleIds, id: \.self) { ruleId in
+                if let index = rules.firstIndex(where: { $0.id == ruleId }) {
+                    WindowRuleEditorRow(
+                        rule: $rules[index],
+                        onRemove: { rules.removeAll { $0.id == ruleId } },
+                    )
                 }
-                .padding(10)
-                .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 9))
             }
             AddRowButton("Add Rule") {
                 rules.append(VisualWindowRule(condition: "", commands: [""]))
             }
         }
+    }
+}
+
+private struct WindowRuleEditorRow: View {
+    @Binding var rule: VisualWindowRule
+    let onRemove: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Condition").frame(width: 70, alignment: .leading)
+                TextField("test %{app-bundle-id} = …", text: $rule.condition)
+                RemoveRowButton(action: onRemove)
+            }
+            CommandListEditor(commands: $rule.commands)
+            Toggle("Continue evaluating later rules after a match", isOn: $rule.checkFurtherCallbacks)
+                .font(.caption)
+        }
+        .padding(10)
+        .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 9))
     }
 }
 

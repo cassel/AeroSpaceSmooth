@@ -20,6 +20,55 @@ struct VisualWindowRule: Identifiable, Equatable, Sendable {
     var id = UUID()
     var condition: String
     var commands: [String]
+    var checkFurtherCallbacks = false
+
+    init(
+        id: UUID = UUID(),
+        condition: String,
+        commands: [String],
+        checkFurtherCallbacks: Bool = false,
+    ) {
+        self.id = id
+        self.condition = condition
+        self.commands = commands
+        self.checkFurtherCallbacks = checkFurtherCallbacks
+    }
+
+    init(applicationBundleIdentifier: String, layout: VisualApplicationWindowLayout) {
+        self.init(
+            condition: "test %{app-bundle-id} = \(applicationBundleIdentifier)",
+            commands: [layout.command],
+            checkFurtherCallbacks: true,
+        )
+    }
+
+    var applicationLayout: VisualApplicationLayoutRule? {
+        let prefix = "test %{app-bundle-id} = "
+        guard condition.hasPrefix(prefix) else { return nil }
+        let bundleIdentifier = String(condition.dropFirst(prefix.count))
+        guard !bundleIdentifier.isEmpty, bundleIdentifier.allSatisfy({ $0.isLetter || $0.isNumber || ".-_".contains($0) }) else { return nil }
+        guard commands.count == 1, let layout = VisualApplicationWindowLayout(command: commands[0]) else { return nil }
+        return VisualApplicationLayoutRule(bundleIdentifier: bundleIdentifier, layout: layout)
+    }
+}
+
+enum VisualApplicationWindowLayout: String, CaseIterable, Identifiable, Sendable {
+    case floating
+    case tiling
+
+    var id: Self { self }
+    var title: String { rawValue.capitalized }
+    var command: String { "layout \(rawValue)" }
+
+    init?(command: String) {
+        guard command.hasPrefix("layout "), let layout = Self(rawValue: String(command.dropFirst("layout ".count))) else { return nil }
+        self = layout
+    }
+}
+
+struct VisualApplicationLayoutRule: Equatable, Sendable {
+    let bundleIdentifier: String
+    let layout: VisualApplicationWindowLayout
 }
 
 struct VisualHotkeyBinding: Identifiable, Equatable, Sendable {
@@ -109,7 +158,11 @@ enum VisualConfigCodec {
             onFocusChanged: stringList(root["on-focus-changed"]),
             windowRules: root["on-window-detected"]?.asArrayOrNil?.compactMap { rawRule in
                 guard let rule = rawRule.asDictOrNil, let condition = rule["if"]?.asStringOrNil else { return nil }
-                return VisualWindowRule(condition: condition, commands: stringList(rule["run"]))
+                return VisualWindowRule(
+                    condition: condition,
+                    commands: stringList(rule["run"]),
+                    checkFurtherCallbacks: rule["check-further-callbacks"]?.asBoolOrNil ?? false,
+                )
             } ?? [],
             workspaceAssignments: root["workspace-to-monitor-force-assignment"]?.asDictOrNil?.map {
                 VisualWorkspaceAssignment(workspace: $0.key, monitors: stringList($0.value))
@@ -287,12 +340,13 @@ enum VisualConfigCodec {
     private static func renderWindowRules(_ rules: [VisualWindowRule]) -> String {
         if rules.isEmpty { return "[]" }
         let rendered = rules.map { rule in
-            """
-                {
-                    if = \(tomlQuote(rule.condition)),
-                    run = \(tomlCommandList(rule.commands)),
-                },
-            """
+            let checkFurtherCallbacks = rule.checkFurtherCallbacks ? "\n        check-further-callbacks = true," : ""
+            return """
+                    {
+                        if = \(tomlQuote(rule.condition)),\(checkFurtherCallbacks)
+                        run = \(tomlCommandList(rule.commands)),
+                    },
+                """
         }.joined(separator: "\n")
         return "[\n\(rendered)\n]"
     }

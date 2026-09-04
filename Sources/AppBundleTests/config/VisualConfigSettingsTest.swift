@@ -105,4 +105,45 @@ final class VisualConfigSettingsTest: XCTestCase {
         XCTAssertEqual(decoded.workspaceAssignments.map(\.workspace).toSet(), ["1", "3", "4"].toSet())
         XCTAssertEqual(decoded.serviceBindings.count, 2)
     }
+
+    func testApplicationLayoutRuleRoundTripsThroughStandardConfig() throws {
+        let original = try VisualConfigCodec.decode(fixture)
+        var draft = original
+        draft.windowRules.insert(
+            VisualWindowRule(applicationBundleIdentifier: "com.dmitrynikolaev.numi", layout: .floating),
+            at: 0,
+        )
+
+        let patched = VisualConfigCodec.patch(fixture, from: original, to: draft)
+        XCTAssertTrue(
+            parseConfig(patched).errors.isEmpty,
+            parseConfig(patched).errors.map { $0.description(.error) }.joined(separator: "\n") + "\n" + patched,
+        )
+        XCTAssertTrue(patched.contains("check-further-callbacks = true"))
+
+        let decoded = try VisualConfigCodec.decode(patched)
+        assertEquals(
+            decoded.windowRules.first?.applicationLayout,
+            VisualApplicationLayoutRule(bundleIdentifier: "com.dmitrynikolaev.numi", layout: .floating),
+        )
+        XCTAssertEqual(decoded.windowRules.first?.checkFurtherCallbacks, true)
+    }
+
+    func testOnlySimpleApplicationLayoutRulesAppearInApplicationPicker() {
+        XCTAssertEqual(
+            VisualWindowRule(
+                condition: "test %{app-bundle-id} = com.hnc.Discord",
+                commands: ["layout tiling"],
+            ).applicationLayout,
+            VisualApplicationLayoutRule(bundleIdentifier: "com.hnc.Discord", layout: .tiling),
+        )
+        XCTAssertNil(VisualWindowRule(
+            condition: "test %{app-bundle-id} = com.hnc.Discord || test %{window-title} = Settings",
+            commands: ["layout floating"],
+        ).applicationLayout)
+        XCTAssertNil(VisualWindowRule(
+            condition: "test %{app-bundle-id} = com.hnc.Discord",
+            commands: ["move-node-to-workspace 3"],
+        ).applicationLayout)
+    }
 }

@@ -294,9 +294,20 @@ bottom, top, and right edges.
 
 ## Applications
 
-The Applications page edits `on-window-detected` rules. Each row contains a condition
-and one or more AeroSpace commands. Rules can match properties such as application
-bundle identifier or title and then move, float, or otherwise configure the window.
+The Applications page includes a visual application picker for choosing whether new
+windows from a particular application open as **Floating** or **Tiled**. The picker
+discovers installed and currently running apps, displays their names and icons, and
+stores the bundle identifier automatically. **Choose Other…** can select an `.app`
+bundle that was not discovered.
+
+These choices are written as standard `on-window-detected` rules, so the resulting
+TOML remains compatible with AeroSpace and can still be edited by hand. New rules
+continue evaluating later callbacks, allowing an application layout choice to coexist
+with an advanced rule such as moving the same window to a workspace. Existing windows
+must be reopened after saving for a new detection rule to take effect.
+
+The Advanced Window Detection Rules card exposes the underlying conditions and command
+lists for cases that need title matching or multiple actions.
 
 Avoid using application identity as a substitute for workspace ownership unless that is
 intentional. A broad rule can make the same browser window appear to jump monitors when

@@ -17,7 +17,7 @@ movement and a native Settings interface.
 
 - A native menu-bar **Settings…** window, written in SwiftUI.
 - Visual editing for General, Workspaces, Applications, Automation, Shortcuts,
-  and the active TOML file.
+  and the active TOML file, including an app picker for Floating/Tiled defaults.
 - Per-monitor automatic layout profiles for every window count from 1 through 10.
 - Fullscreen, Dwindle, Vertical Pairs, Grid, Columns, Rows, and Custom layouts.
 - Monitor previews that use the connected display's real aspect ratio and resolution.

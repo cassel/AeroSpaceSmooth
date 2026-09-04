@@ -71,14 +71,15 @@ xcodebuild \
 The generated app is:
 
 ```text
-/Users/cassel/app/AeroSpaceSmooth/xcode/.xcode-build/Build/Products/Debug/AeroSpace-Debug.app
+/Users/cassel/app/AeroSpaceSmooth/xcode/.xcode-build/Build/Products/Debug/AeroSpaceSmooth.app
 ```
 
 ## Manual test safety
 
-Do not run the installed AeroSpace and AeroSpace-Debug simultaneously. They
+Do not run the installed AeroSpace and an additional AeroSpaceSmooth build simultaneously. They
 both manage the same windows, shortcuts, and server resources. Quit the
-installed app first, open the debug build, and grant AeroSpace-Debug
+installed app first, install the debug build at the canonical
+`/Users/cassel/Applications/AeroSpaceSmooth.app` path, and grant AeroSpaceSmooth
 Accessibility permission when macOS asks.
 
 The first manual test should cover:
