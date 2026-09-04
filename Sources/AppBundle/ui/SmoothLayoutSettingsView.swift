@@ -109,6 +109,7 @@ private enum SmoothSettingsSection: String, CaseIterable, Identifiable {
 @MainActor
 private struct SmoothLayoutSettingsView: View {
     @StateObject private var configSettings = VisualConfigSettingsStore()
+    @ObservedObject private var conflictMonitor = WindowManagerConflictMonitor.shared
     @State private var selection: SmoothSettingsSection = .layouts
 
     var body: some View {
@@ -156,6 +157,20 @@ private struct SmoothLayoutSettingsView: View {
             title: "General",
             subtitle: "Startup, window-tree behavior and AeroSpace defaults.",
         ) {
+            if !conflictMonitor.conflicts.isEmpty {
+                SettingsCard(
+                    "Window Manager Conflict",
+                    systemImage: "exclamationmark.triangle.fill",
+                    help: "Only one window manager should control macOS windows at a time.",
+                ) {
+                    Text("Also running: \(conflictMonitor.conflicts.map(\.name).joined(separator: ", "))")
+                        .foregroundStyle(.orange)
+                    Text("Quit the other window manager or restart AeroSpaceSmooth and choose which one should remain active.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             SettingsCard(
                 "Application",
                 systemImage: "gearshape.2",
@@ -261,17 +276,17 @@ private struct SmoothLayoutSettingsView: View {
             subtitle: "Choose how application windows enter the AeroSpace layout.",
         ) {
             SettingsCard(
-                "Application Window Layout",
+                "Visual App Rules",
                 systemImage: "macwindow.badge.plus",
-                help: "Selected applications open as floating or tiled. AeroSpaceSmooth identifies each application automatically and stores the choice as a standard on-window-detected rule.",
+                help: "Match an application and optionally part of its window title, then choose floating or tiled layout and a destination workspace. Rules run from top to bottom and remain standard on-window-detected TOML entries.",
             ) {
-                ApplicationLayoutRulesEditor(rules: $configSettings.draft.windowRules)
+                ApplicationRulesEditor(rules: $configSettings.draft.windowRules)
             }
 
             SettingsCard(
                 "Advanced Window Detection Rules",
                 systemImage: "arrowshape.turn.up.right.circle",
-                help: "Advanced rules can test bundle identifiers, titles and other window properties, then run one or more AeroSpace commands. Simple application layout choices are managed in the card above.",
+                help: "Rules that use expressions or commands not represented by the visual editor remain fully editable here.",
             ) {
                 WindowRulesEditor(rules: $configSettings.draft.windowRules)
             }
@@ -597,26 +612,31 @@ private struct WorkspaceAssignmentsEditor: View {
 }
 
 @MainActor
-private struct ApplicationLayoutRulesEditor: View {
+private struct ApplicationRulesEditor: View {
     @Binding var rules: [VisualWindowRule]
     @State private var isApplicationPickerPresented = false
 
-    private var applicationRules: [VisualWindowRule] {
-        rules.filter { $0.applicationLayout != nil }
+    private var applicationRuleIds: [UUID] {
+        rules.filter { $0.visualApplicationRule != nil }.map(\.id)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if applicationRules.isEmpty {
-                Text("No application-specific layout choices yet.")
+            if applicationRuleIds.isEmpty {
+                Text("No visual application rules yet.")
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(applicationRules) { rule in
-                    if let applicationLayout = rule.applicationLayout {
-                        ApplicationLayoutRuleRow(
-                            application: .resolve(bundleIdentifier: applicationLayout.bundleIdentifier),
-                            layout: layoutBinding(for: rule.id),
-                            onRemove: { rules.removeAll { $0.id == rule.id } },
+                ForEach(Array(applicationRuleIds.enumerated()), id: \.element) { visibleIndex, ruleId in
+                    if let rule = rules.first(where: { $0.id == ruleId })?.visualApplicationRule {
+                        ApplicationRuleEditorRow(
+                            application: .resolve(bundleIdentifier: rule.bundleIdentifier),
+                            ruleNumber: (rules.firstIndex(where: { $0.id == ruleId }) ?? 0) + 1,
+                            rule: applicationRuleBinding(for: ruleId),
+                            canMoveUp: visibleIndex > 0,
+                            canMoveDown: visibleIndex < applicationRuleIds.count - 1,
+                            onMoveUp: { moveRule(ruleId, offset: -1) },
+                            onMoveDown: { moveRule(ruleId, offset: 1) },
+                            onRemove: { rules.removeAll { $0.id == ruleId } },
                         )
                     }
                 }
@@ -629,30 +649,49 @@ private struct ApplicationLayoutRulesEditor: View {
             }
             .sheet(isPresented: $isApplicationPickerPresented) {
                 ApplicationPicker(
-                    excludedBundleIdentifiers: Set(applicationRules.compactMap { $0.applicationLayout?.bundleIdentifier }),
+                    excludedBundleIdentifiers: Set(rules.compactMap { $0.visualApplicationRule?.bundleIdentifier }),
                     onSelect: addApplication,
                 )
             }
-            Text("Layout choices apply when an application creates a new window. Reopen existing windows after saving to apply the new choice.")
+            Text("Rules apply to newly detected windows. Reopen existing windows after saving. Use the arrows to set priority.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
     }
 
-    private func layoutBinding(for ruleId: UUID) -> Binding<VisualApplicationWindowLayout> {
+    private func applicationRuleBinding(for ruleId: UUID) -> Binding<VisualApplicationRule> {
         Binding(
             get: {
-                rules.first(where: { $0.id == ruleId })?.applicationLayout?.layout ?? .floating
+                rules.first(where: { $0.id == ruleId })?.visualApplicationRule ?? VisualApplicationRule(
+                    bundleIdentifier: "",
+                    titleContains: "",
+                    layout: .floating,
+                    workspace: "",
+                )
             },
-            set: { layout in
+            set: { applicationRule in
                 guard let index = rules.firstIndex(where: { $0.id == ruleId }) else { return }
-                rules[index].commands = [layout.command]
+                rules[index] = VisualWindowRule(
+                    id: ruleId,
+                    applicationRule: applicationRule,
+                    checkFurtherCallbacks: rules[index].checkFurtherCallbacks,
+                )
             },
         )
     }
 
+    private func moveRule(_ ruleId: UUID, offset: Int) {
+        guard let visibleIndex = applicationRuleIds.firstIndex(of: ruleId) else { return }
+        let destination = visibleIndex + offset
+        guard applicationRuleIds.indices.contains(destination),
+              let sourceIndex = rules.firstIndex(where: { $0.id == ruleId }),
+              let destinationIndex = rules.firstIndex(where: { $0.id == applicationRuleIds[destination] })
+        else { return }
+        rules.swapAt(sourceIndex, destinationIndex)
+    }
+
     private func addApplication(_ application: VisualApplicationChoice) {
-        guard !rules.contains(where: { $0.applicationLayout?.bundleIdentifier == application.bundleIdentifier }) else { return }
+        guard !rules.contains(where: { $0.visualApplicationRule?.bundleIdentifier == application.bundleIdentifier }) else { return }
         rules.insert(
             VisualWindowRule(applicationBundleIdentifier: application.bundleIdentifier, layout: .floating),
             at: 0,
@@ -661,36 +700,63 @@ private struct ApplicationLayoutRulesEditor: View {
 }
 
 @MainActor
-private struct ApplicationLayoutRuleRow: View {
+private struct ApplicationRuleEditorRow: View {
     let application: VisualApplicationChoice
-    @Binding var layout: VisualApplicationWindowLayout
+    let ruleNumber: Int
+    @Binding var rule: VisualApplicationRule
+    let canMoveUp: Bool
+    let canMoveDown: Bool
+    let onMoveUp: () -> Void
+    let onMoveDown: () -> Void
     let onRemove: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(nsImage: application.icon)
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(width: 34, height: 34)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(application.name)
-                Text(application.bundleIdentifier)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                Image(nsImage: application.icon)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 34, height: 34)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(ruleNumber). \(application.name)")
+                    Text(application.bundleIdentifier)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+                Spacer(minLength: 12)
+                Button(action: onMoveUp) { Image(systemName: "arrow.up") }
+                    .disabled(!canMoveUp)
+                    .help("Increase rule priority")
+                Button(action: onMoveDown) { Image(systemName: "arrow.down") }
+                    .disabled(!canMoveDown)
+                    .help("Decrease rule priority")
+                RemoveRowButton(action: onRemove)
             }
-            Spacer(minLength: 12)
-            Picker("Window layout", selection: $layout) {
-                ForEach(VisualApplicationWindowLayout.allCases) { layout in
-                    Text(layout.title).tag(layout)
+
+            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
+                GridRow {
+                    Text("Title contains")
+                    TextField("Any title", text: $rule.titleContains)
+                }
+                GridRow {
+                    Text("Layout")
+                    Picker("Layout", selection: $rule.layout) {
+                        Text("No change").tag(nil as VisualApplicationWindowLayout?)
+                        ForEach(VisualApplicationWindowLayout.allCases) { layout in
+                            Text(layout.title).tag(Optional(layout))
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                }
+                GridRow {
+                    Text("Workspace")
+                    TextField("Keep current, or enter a workspace without spaces", text: $rule.workspace)
                 }
             }
-            .labelsHidden()
-            .pickerStyle(.segmented)
-            .frame(width: 170)
-            RemoveRowButton(action: onRemove)
         }
-        .padding(10)
+        .padding(12)
         .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 9))
     }
 }
@@ -881,7 +947,7 @@ private struct WindowRulesEditor: View {
     @Binding var rules: [VisualWindowRule]
 
     private var advancedRuleIds: [UUID] {
-        rules.filter { $0.applicationLayout == nil }.map(\.id)
+        rules.filter { $0.visualApplicationRule == nil }.map(\.id)
     }
 
     var body: some View {

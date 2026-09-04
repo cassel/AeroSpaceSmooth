@@ -8,6 +8,10 @@ import Foundation
         unsafe _isCli = false
         initServerArgs()
         scheduleCommandLineSettingsWindowIfRequested()
+        guard WindowManagerConflictMonitor.shared.confirmStartupIfNeeded() else {
+            NSApp.terminate(nil)
+            return
+        }
         await waitForAccessibilityPermission_nonCancellable()
         if isDebug {
             await toggleReleaseServerIfDebug(.off)

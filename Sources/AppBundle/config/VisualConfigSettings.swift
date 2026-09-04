@@ -35,20 +35,127 @@ struct VisualWindowRule: Identifiable, Equatable, Sendable {
     }
 
     init(applicationBundleIdentifier: String, layout: VisualApplicationWindowLayout) {
+        self.init(applicationRule: VisualApplicationRule(
+            bundleIdentifier: applicationBundleIdentifier,
+            titleContains: "",
+            layout: layout,
+            workspace: "",
+        ))
+    }
+
+    init(
+        id: UUID = UUID(),
+        applicationRule: VisualApplicationRule,
+        checkFurtherCallbacks: Bool = true,
+    ) {
+        var matchers = ["test %{app-bundle-id} = \(applicationRule.bundleIdentifier)"]
+        if !applicationRule.titleContains.isEmpty {
+            let literalPattern = Self.literalRegex(for: applicationRule.titleContains)
+            matchers.append("test %{window-title} ~= \(Self.shellQuote(literalPattern))")
+        }
+        var commands = [String]()
+        if let layout = applicationRule.layout { commands.append(layout.command) }
+        if !applicationRule.workspace.isEmpty {
+            commands.append("move-node-to-workspace -- \(Self.shellQuote(applicationRule.workspace))")
+        }
         self.init(
-            condition: "test %{app-bundle-id} = \(applicationBundleIdentifier)",
-            commands: [layout.command],
-            checkFurtherCallbacks: true,
+            id: id,
+            condition: matchers.joined(separator: " && "),
+            commands: commands,
+            checkFurtherCallbacks: checkFurtherCallbacks,
         )
     }
 
-    var applicationLayout: VisualApplicationLayoutRule? {
-        let prefix = "test %{app-bundle-id} = "
-        guard condition.hasPrefix(prefix) else { return nil }
-        let bundleIdentifier = String(condition.dropFirst(prefix.count))
-        guard !bundleIdentifier.isEmpty, bundleIdentifier.allSatisfy({ $0.isLetter || $0.isNumber || ".-_".contains($0) }) else { return nil }
-        guard commands.count == 1, let layout = VisualApplicationWindowLayout(command: commands[0]) else { return nil }
-        return VisualApplicationLayoutRule(bundleIdentifier: bundleIdentifier, layout: layout)
+    var visualApplicationRule: VisualApplicationRule? {
+        guard let matcher = condition.lexAndParseShell().getIgnoringErrorsOrNil() else { return nil }
+        let matcherCommands: [[String]] = switch matcher {
+            case .cmd(let command): [command]
+            case .and(let clauses): clauses.compactMap {
+                    if case .cmd(let command) = $0 { command } else { nil }
+                }
+            case .empty, .pipe, .or, .seq: []
+        }
+        guard !matcherCommands.isEmpty else { return nil }
+
+        var bundleIdentifier: String?
+        var titlePattern: String?
+        for command in matcherCommands {
+            guard command.count == 4, command[0] == "test" else { return nil }
+            switch (command[1], command[2]) {
+                case ("%{app-bundle-id}", "=") where bundleIdentifier == nil:
+                    bundleIdentifier = command[3]
+                case ("%{window-title}", "~=") where titlePattern == nil:
+                    titlePattern = command[3]
+                default:
+                    return nil
+            }
+        }
+        guard let bundleIdentifier,
+              !bundleIdentifier.isEmpty,
+              bundleIdentifier.allSatisfy({ $0.isLetter || $0.isNumber || ".-_".contains($0) })
+        else { return nil }
+
+        var layout: VisualApplicationWindowLayout?
+        var workspace = ""
+        for commandText in commands {
+            guard let command = commandText.lexAndParseShell().getIgnoringErrorsOrNil(), case .cmd(let words) = command else { return nil }
+            if words.count == 2, words[0] == "layout", let parsedLayout = VisualApplicationWindowLayout(rawValue: words[1]), layout == nil {
+                layout = parsedLayout
+            } else if words.count == 3, words[0] == "move-node-to-workspace", words[1] == "--", workspace.isEmpty {
+                workspace = words[2]
+            } else if words.count == 2, words[0] == "move-node-to-workspace", workspace.isEmpty {
+                workspace = words[1]
+            } else {
+                return nil
+            }
+        }
+        guard layout != nil || !workspace.isEmpty else { return nil }
+
+        let titleContains: String
+        if let titlePattern {
+            titleContains = Self.literalText(fromEscapedRegex: titlePattern) ?? ""
+            guard !titleContains.isEmpty else { return nil }
+        } else {
+            titleContains = ""
+        }
+        return VisualApplicationRule(
+            bundleIdentifier: bundleIdentifier,
+            titleContains: titleContains,
+            layout: layout,
+            workspace: workspace,
+        )
+    }
+
+    private static func shellQuote(_ value: String) -> String {
+        "'\(value)'"
+    }
+
+    private static func literalText(fromEscapedRegex pattern: String) -> String? {
+        var result = ""
+        var index = pattern.startIndex
+        while index < pattern.endIndex {
+            if pattern[index...].hasPrefix("\\x{27}") {
+                result.append("'")
+                index = pattern.index(index, offsetBy: 6)
+            } else if pattern[index] == "\\" {
+                let next = pattern.index(after: index)
+                guard next < pattern.endIndex else { return nil }
+                result.append(pattern[next])
+                index = pattern.index(after: next)
+            } else {
+                result.append(pattern[index])
+                index = pattern.index(after: index)
+            }
+        }
+        return result
+    }
+
+    private static func literalRegex(for text: String) -> String {
+        let metacharacters = "\\.^$|?*+()[]{}"
+        return text.map { character in
+            if character == "'" { return "\\x{27}" }
+            return metacharacters.contains(character) ? "\\\(character)" : String(character)
+        }.joined()
     }
 }
 
@@ -59,16 +166,13 @@ enum VisualApplicationWindowLayout: String, CaseIterable, Identifiable, Sendable
     var id: Self { self }
     var title: String { rawValue.capitalized }
     var command: String { "layout \(rawValue)" }
-
-    init?(command: String) {
-        guard command.hasPrefix("layout "), let layout = Self(rawValue: String(command.dropFirst("layout ".count))) else { return nil }
-        self = layout
-    }
 }
 
-struct VisualApplicationLayoutRule: Equatable, Sendable {
-    let bundleIdentifier: String
-    let layout: VisualApplicationWindowLayout
+struct VisualApplicationRule: Equatable, Sendable {
+    var bundleIdentifier: String
+    var titleContains: String
+    var layout: VisualApplicationWindowLayout?
+    var workspace: String
 }
 
 struct VisualHotkeyBinding: Identifiable, Equatable, Sendable {

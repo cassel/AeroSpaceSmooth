@@ -123,27 +123,61 @@ final class VisualConfigSettingsTest: XCTestCase {
 
         let decoded = try VisualConfigCodec.decode(patched)
         assertEquals(
-            decoded.windowRules.first?.applicationLayout,
-            VisualApplicationLayoutRule(bundleIdentifier: "com.dmitrynikolaev.numi", layout: .floating),
+            decoded.windowRules.first?.visualApplicationRule,
+            VisualApplicationRule(
+                bundleIdentifier: "com.dmitrynikolaev.numi",
+                titleContains: "",
+                layout: .floating,
+                workspace: "",
+            ),
         )
         XCTAssertEqual(decoded.windowRules.first?.checkFurtherCallbacks, true)
     }
 
-    func testOnlySimpleApplicationLayoutRulesAppearInApplicationPicker() {
+    func testOnlySupportedApplicationRulesAppearInVisualEditor() {
         XCTAssertEqual(
             VisualWindowRule(
                 condition: "test %{app-bundle-id} = com.hnc.Discord",
                 commands: ["layout tiling"],
-            ).applicationLayout,
-            VisualApplicationLayoutRule(bundleIdentifier: "com.hnc.Discord", layout: .tiling),
+            ).visualApplicationRule,
+            VisualApplicationRule(
+                bundleIdentifier: "com.hnc.Discord",
+                titleContains: "",
+                layout: .tiling,
+                workspace: "",
+            ),
         )
         XCTAssertNil(VisualWindowRule(
             condition: "test %{app-bundle-id} = com.hnc.Discord || test %{window-title} = Settings",
             commands: ["layout floating"],
-        ).applicationLayout)
+        ).visualApplicationRule)
         XCTAssertNil(VisualWindowRule(
             condition: "test %{app-bundle-id} = com.hnc.Discord",
-            commands: ["move-node-to-workspace 3"],
-        ).applicationLayout)
+            commands: ["exec-and-forget open -a Finder"],
+        ).visualApplicationRule)
+    }
+
+    func testVisualApplicationRuleSupportsTitleWorkspaceAndOrderedActions() throws {
+        let original = try VisualConfigCodec.decode(fixture)
+        var draft = original
+        let visualRule = VisualApplicationRule(
+            bundleIdentifier: "com.apple.Terminal",
+            titleContains: "Bob's [scratch] terminal",
+            layout: .floating,
+            workspace: "utilities",
+        )
+        draft.windowRules.insert(VisualWindowRule(applicationRule: visualRule), at: 0)
+
+        let patched = VisualConfigCodec.patch(fixture, from: original, to: draft)
+        XCTAssertTrue(
+            parseConfig(patched).errors.isEmpty,
+            parseConfig(patched).errors.map { $0.description(.error) }.joined(separator: "\n") + "\n" + patched,
+        )
+        let decoded = try VisualConfigCodec.decode(patched)
+        assertEquals(decoded.windowRules.first?.visualApplicationRule, visualRule)
+        assertEquals(decoded.windowRules.first?.commands, [
+            "layout floating",
+            "move-node-to-workspace -- 'utilities'",
+        ])
     }
 }
