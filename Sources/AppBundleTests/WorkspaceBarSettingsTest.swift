@@ -29,7 +29,20 @@ final class WorkspaceBarSettingsTest: XCTestCase {
         updateTrayText()
 
         assertFalse(TrayMenuModel.shared.trayText.contains("_smooth-"))
-        assertFalse(TrayMenuModel.shared.trayItems.contains { $0.name.hasPrefix("_smooth-") })
+        assertFalse(TrayMenuModel.shared.activeWorkspaceNames.contains { $0.hasPrefix("_smooth-") })
         assertFalse(TrayMenuModel.shared.workspaces.contains { $0.name.hasPrefix("_smooth-") })
+    }
+
+    func testMenuBarPresentationDefaultsAndPersists() throws {
+        let suiteName = "MenuBarAppearanceSettingsTest.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let settings = MenuBarAppearanceSettings(defaults: defaults)
+
+        assertEquals(settings.presentation, .focusedWorkspace)
+        settings.setPresentation(.iconOnly)
+
+        let reopened = MenuBarAppearanceSettings(defaults: defaults)
+        assertEquals(reopened.presentation, .iconOnly)
     }
 }

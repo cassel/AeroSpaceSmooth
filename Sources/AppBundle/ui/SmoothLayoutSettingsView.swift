@@ -115,6 +115,7 @@ private struct SmoothLayoutSettingsView: View {
     @ObservedObject private var updateChecker = UpdateChecker.shared
     @ObservedObject private var workspaceBar = WorkspaceBarSettings.shared
     @ObservedObject private var scratchpads = ScratchpadManager.shared
+    @ObservedObject private var menuBarAppearance = MenuBarAppearanceSettings.shared
     @State private var selection: SmoothSettingsSection = .layouts
 
     var body: some View {
@@ -281,6 +282,46 @@ private struct SmoothLayoutSettingsView: View {
                 )
                 .disabled(!workspaceBar.isEnabled)
             }
+
+            SettingsCard(
+                "Menu Bar",
+                systemImage: "menubar.rectangle",
+                help: "AeroSpaceSmooth always uses one native symbol in the menu bar. Choose how much workspace information appears beside it.",
+            ) {
+                Picker(
+                    "Content",
+                    selection: Binding(
+                        get: { menuBarAppearance.presentation },
+                        set: { menuBarAppearance.setPresentation($0) },
+                    ),
+                ) {
+                    ForEach(MenuBarPresentation.allCases) { presentation in
+                        Text(presentation.title).tag(presentation)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Label(menuBarPreviewText, systemImage: "rectangle.3.group")
+                    .font(.system(.body, design: .rounded, weight: .semibold))
+                    .padding(.vertical, 7)
+                    .padding(.horizontal, 11)
+                    .background(.quaternary.opacity(0.55), in: Capsule())
+
+                Text(menuBarAppearance.presentation.explanation)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var menuBarPreviewText: String {
+        switch menuBarAppearance.presentation {
+            case .iconOnly: ""
+            case .focusedWorkspace: TrayMenuModel.shared.workspaces.first(where: \.isFocused)?.name ?? "1"
+            case .allDisplays:
+                TrayMenuModel.shared.activeWorkspaceNames
+                    .joined(separator: " · ")
+                    .takeIf { !$0.isEmpty } ?? "1 · 2"
         }
     }
 

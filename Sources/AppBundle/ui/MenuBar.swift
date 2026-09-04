@@ -5,11 +5,15 @@ import SwiftUI
 @MainActor
 public func menuBar(viewModel: TrayMenuModel) -> some Scene { // todo should it be converted to "SwiftUI struct"?
     MenuBarExtra {
-        let shortIdentification = "\(aeroSpaceAppName) v\(aeroSpaceAppVersion) \(gitShortHash)"
         let identification      = "\(aeroSpaceAppName) v\(aeroSpaceAppVersion) \(gitHash)"
-        Text(shortIdentification)
-        Button("Copy to clipboard") { identification.copyToClipboard() }
-            .keyboardShortcut("C", modifiers: .command)
+        Text(aeroSpaceAppName)
+        Text("Version \(aeroSpaceAppVersion) (\(gitShortHash))")
+        Button {
+            identification.copyToClipboard()
+        } label: {
+            Label("Copy Version Information", systemImage: "doc.on.doc")
+        }
+        .keyboardShortcut("C", modifiers: .command)
         Divider()
 
         if viewModel.axPermissionStatus == .granted {
@@ -41,37 +45,38 @@ public func menuBar(viewModel: TrayMenuModel) -> some Scene { // todo should it 
                 Divider()
             }
             if let token: RunSessionGuard = .isServerEnabled {
-                Text("Workspaces:")
+                Text("Workspaces")
                 ForEach(viewModel.workspaces, id: \.name) { workspace in
-                    Button {
-                        Task.startUnstructured {
-                            try await runLightSession(.menuBarButton, token) { _ = Workspace.get(byName: workspace.name).focusWorkspace() }
-                        }
-                    } label: {
-                        Toggle(isOn: .constant(workspace.isFocused)) {
-                            Text(workspace.name + workspace.suffix).font(.system(.body, design: .monospaced))
-                        }
-                    }
+                    Toggle(
+                        workspace.name + workspace.suffix,
+                        isOn: Binding(
+                            get: { workspace.isFocused },
+                            set: { _ in
+                                Task.startUnstructured {
+                                    try await runLightSession(.menuBarButton, token) {
+                                        _ = Workspace.get(byName: workspace.name).focusWorkspace()
+                                    }
+                                }
+                            },
+                        ),
+                    )
                 }
                 Divider()
             }
             Button {
-                NSWorkspace.shared.open(URL(string: "https://github.com/sponsors/nikitabobko").orDie())
-                viewModel.sponsorshipMessage = sponsorshipPrompts.randomElement().orDie()
-            } label: {
-                Text("Sponsor AeroSpace on GitHub")
-                Text(viewModel.sponsorshipMessage)
-            }
-            Divider()
-            Button(viewModel.isEnabled ? "Disable" : "Enable") {
                 Task.startUnstructured {
                     try await runLightSession(.menuBarButton, .forceRun) {
                         _ = await EnableCommand(args: EnableCmdArgs(rawArgs: [], targetState: .toggle))
                             .run(.defaultEnv, .emptyStdin)
                     }
                 }
-            }.keyboardShortcut("E", modifiers: .command)
-            getExperimentalUISettingsMenu(viewModel: viewModel)
+            } label: {
+                Label(
+                    viewModel.isEnabled ? "Pause Window Management" : "Resume Window Management",
+                    systemImage: viewModel.isEnabled ? "pause.circle" : "play.circle",
+                )
+            }
+            .keyboardShortcut("E", modifiers: .command)
             openConfigButton()
             reloadConfigButton(warningsAsErrors: false)
         } else {
@@ -79,32 +84,24 @@ public func menuBar(viewModel: TrayMenuModel) -> some Scene { // todo should it 
                 viewModel.axPermissionStatus = .waitingWithPrompt
             }
         }
-        Button("Quit \(aeroSpaceAppName)") {
+        Button {
             Task.startUnstructured {
                 terminationHandler?.beforeTermination()
                 terminateApp()
             }
-        }.keyboardShortcut("Q", modifiers: .command)
-    } label: {
-        switch (viewModel.axPermissionStatus, viewModel.isEnabled) {
-            case (.granted, true):
-                MenuBarLabel().environmentObject(viewModel)
-            case (.granted, false):
-                Image(systemName: "pause.circle.fill")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-            case (_, _):
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
+        } label: {
+            Label("Quit \(aeroSpaceAppName)", systemImage: "power")
         }
+        .keyboardShortcut("Q", modifiers: .command)
+    } label: {
+        MenuBarLabel().environmentObject(viewModel)
     }
 }
 
 @MainActor @ViewBuilder
 func openConfigButton(showShortcutGroup: Bool = false) -> some View {
     let editor = getTextEditorToOpenConfig()
-    let button = Button("Open config in '\(editor.lastPathComponent)'") {
+    let button = Button {
         let fallbackConfig: URL = FileManager.default.homeDirectoryForCurrentUser.appending(path: configDotfileName)
         switch findCustomConfigUrl() {
             case .file(let url):
@@ -115,7 +112,10 @@ func openConfigButton(showShortcutGroup: Bool = false) -> some View {
             case .ambiguousConfigError:
                 fallbackConfig.open(with: editor)
         }
-    }.keyboardShortcut(",", modifiers: .command)
+    } label: {
+        Label("Open Configuration…", systemImage: "doc.text")
+    }
+    .keyboardShortcut(",", modifiers: .command)
     switch showShortcutGroup {
         case true: shortcutGroup(label: Text("⌘ ,"), content: button)
         case false: button
@@ -125,14 +125,17 @@ func openConfigButton(showShortcutGroup: Bool = false) -> some View {
 @MainActor @ViewBuilder
 func reloadConfigButton(showShortcutGroup: Bool = false, warningsAsErrors: Bool) -> some View {
     if let token: RunSessionGuard = .isServerEnabled {
-        let button = Button("Reload config") {
+        let button = Button {
             Task.startUnstructured {
                 try await runLightSession(.menuBarButton, token) {
                     let args: ReloadConfigCmdArgs = ReloadConfigCmdArgs(rawArgs: []).copy(\.warningsAsErrors, warningsAsErrors)
                     _ = await reloadConfig_nonCancellable(args: args)
                 }
             }
-        }.keyboardShortcut("R", modifiers: .command)
+        } label: {
+            Label("Reload Configuration", systemImage: "arrow.clockwise")
+        }
+        .keyboardShortcut("R", modifiers: .command)
         switch showShortcutGroup {
             case true: shortcutGroup(label: Text("⌘ R"), content: button)
             case false: button
