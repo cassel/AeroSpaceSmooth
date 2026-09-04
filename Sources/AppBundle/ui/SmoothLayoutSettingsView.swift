@@ -286,7 +286,7 @@ private struct SmoothLayoutSettingsView: View {
             SettingsCard(
                 "Menu Bar",
                 systemImage: "menubar.rectangle",
-                help: "AeroSpaceSmooth appears in every menu bar macOS makes available. Choose one content presentation to use consistently across displays.",
+                help: "AeroSpaceSmooth appears in every menu bar macOS makes available. Choose exactly what each menu bar should show.",
             ) {
                 LabeledContent("Appears On") {
                     Label("All Displays", systemImage: "checkmark.circle.fill")
@@ -296,7 +296,7 @@ private struct SmoothLayoutSettingsView: View {
                 Divider()
 
                 Picker(
-                    "Content",
+                    "Show Only",
                     selection: Binding(
                         get: { menuBarAppearance.presentation },
                         set: { menuBarAppearance.setPresentation($0) },
@@ -308,17 +308,19 @@ private struct SmoothLayoutSettingsView: View {
                 }
                 .pickerStyle(.menu)
 
-                MenuBarLabel()
-                    .environmentObject(TrayMenuModel.shared)
-                    .padding(.vertical, 7)
-                    .padding(.horizontal, 11)
-                    .background(.quaternary.opacity(0.55), in: Capsule())
+                LabeledContent("Preview") {
+                    MenuBarLabel()
+                        .environmentObject(TrayMenuModel.shared)
+                        .padding(.vertical, 7)
+                        .padding(.horizontal, 11)
+                        .background(.quaternary.opacity(0.55), in: Capsule())
+                }
 
                 Text(menuBarAppearance.presentation.explanation)
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                Text("The selected content style is mirrored across every available menu bar.")
+                Text("Only this style is mirrored across every available menu bar.")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }

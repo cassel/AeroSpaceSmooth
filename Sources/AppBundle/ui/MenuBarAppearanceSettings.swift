@@ -22,11 +22,11 @@ enum MenuBarPresentation: String, CaseIterable, Identifiable, Equatable, Hashabl
 
     var explanation: String {
         switch self {
-            case .iconOnly: "Shows only the AeroSpaceSmooth icon for the most compact menu bar."
-            case .focusedWorkspace: "Shows the same icon followed by the focused workspace."
-            case .activeWorkspaces: "Lists the active workspace from each display beside the icon."
-            case .i3Grouped: "Groups visible workspaces first, followed by occupied workspaces that are currently hidden."
-            case .i3Ordered: "Shows visible and occupied workspaces together in their configured order."
+            case .iconOnly: "Shows only the AeroSpaceSmooth icon."
+            case .focusedWorkspace: "Shows only the focused workspace name, without the app icon."
+            case .activeWorkspaces: "Shows only the active workspace from each display, without the app icon."
+            case .i3Grouped: "Shows only workspace chips, with visible workspaces first and hidden occupied workspaces after the divider."
+            case .i3Ordered: "Shows only visible and occupied workspace chips in their configured order."
         }
     }
 }

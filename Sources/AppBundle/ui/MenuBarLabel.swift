@@ -24,9 +24,6 @@ struct MenuBarLabel: View {
 
     private var menuBarContent: some View {
         HStack(spacing: 4) {
-            Image(systemName: "rectangle.3.group")
-                .symbolRenderingMode(.monochrome)
-                .imageScale(.medium)
             presentationContent
         }
         .font(.system(size: 13, weight: .semibold))
@@ -43,30 +40,47 @@ struct MenuBarLabel: View {
     private var presentationContent: some View {
         switch appearance.presentation {
             case .iconOnly:
-                EmptyView()
+                Image(systemName: "rectangle.3.group")
+                    .symbolRenderingMode(.monochrome)
+                    .imageScale(.medium)
             case .focusedWorkspace:
                 if let focused = viewModel.workspaces.first(where: \.isFocused) {
                     Text(focused.name).lineLimit(1)
+                } else {
+                    Text("—")
                 }
             case .activeWorkspaces:
-                Text(viewModel.activeWorkspaceNames.joined(separator: " · "))
-                    .lineLimit(1)
+                if viewModel.activeWorkspaceNames.isEmpty {
+                    Text("—")
+                } else {
+                    Text(viewModel.activeWorkspaceNames.joined(separator: " · "))
+                        .lineLimit(1)
+                }
             case .i3Grouped:
                 let visible = viewModel.workspaces.filter(\.isVisible)
                 let hiddenOccupied = viewModel.workspaces.filter { !$0.isEffectivelyEmpty && !$0.isVisible }
-                ForEach(visible, id: \.name) { workspace in
-                    workspaceChip(workspace)
-                }
-                if !visible.isEmpty, !hiddenOccupied.isEmpty {
-                    Text("|")
-                        .foregroundStyle(renderColor.opacity(0.35))
-                }
-                ForEach(hiddenOccupied, id: \.name) { workspace in
-                    workspaceChip(workspace, isDimmed: true)
+                if visible.isEmpty, hiddenOccupied.isEmpty {
+                    Text("—")
+                } else {
+                    ForEach(visible, id: \.name) { workspace in
+                        workspaceChip(workspace)
+                    }
+                    if !visible.isEmpty, !hiddenOccupied.isEmpty {
+                        Text("|")
+                            .foregroundStyle(renderColor.opacity(0.35))
+                    }
+                    ForEach(hiddenOccupied, id: \.name) { workspace in
+                        workspaceChip(workspace, isDimmed: true)
+                    }
                 }
             case .i3Ordered:
-                ForEach(viewModel.workspaces.filter { !$0.isEffectivelyEmpty || $0.isVisible }, id: \.name) { workspace in
-                    workspaceChip(workspace, isDimmed: !workspace.isVisible)
+                let shown = viewModel.workspaces.filter { !$0.isEffectivelyEmpty || $0.isVisible }
+                if shown.isEmpty {
+                    Text("—")
+                } else {
+                    ForEach(shown, id: \.name) { workspace in
+                        workspaceChip(workspace, isDimmed: !workspace.isVisible)
+                    }
                 }
         }
     }
