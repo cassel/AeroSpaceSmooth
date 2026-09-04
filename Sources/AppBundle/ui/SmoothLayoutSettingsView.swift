@@ -286,8 +286,15 @@ private struct SmoothLayoutSettingsView: View {
             SettingsCard(
                 "Menu Bar",
                 systemImage: "menubar.rectangle",
-                help: "AeroSpaceSmooth always uses one native symbol in the menu bar. Choose how much workspace information appears beside it.",
+                help: "AeroSpaceSmooth appears in every menu bar macOS makes available. Choose one content presentation to use consistently across displays.",
             ) {
+                LabeledContent("Appears On") {
+                    Label("All Displays", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+
+                Divider()
+
                 Picker(
                     "Content",
                     selection: Binding(
@@ -310,6 +317,10 @@ private struct SmoothLayoutSettingsView: View {
                 Text(menuBarAppearance.presentation.explanation)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                Text("The selected content style is mirrored across every available menu bar.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
             }
         }
     }

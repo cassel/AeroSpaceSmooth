@@ -27,7 +27,7 @@ struct MenuBarLabel: View {
                 if let focused = viewModel.workspaces.first(where: \.isFocused) {
                     Text(focused.name).lineLimit(1)
                 }
-            case .allDisplays:
+            case .activeWorkspaces:
                 Text(viewModel.activeWorkspaceNames.joined(separator: " · "))
                     .lineLimit(1)
             case .i3Grouped:

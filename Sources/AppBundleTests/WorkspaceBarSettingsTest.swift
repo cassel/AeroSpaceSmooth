@@ -40,6 +40,7 @@ final class WorkspaceBarSettingsTest: XCTestCase {
         let settings = MenuBarAppearanceSettings(defaults: defaults)
 
         assertEquals(settings.presentation, .focusedWorkspace)
+        assertEquals(MenuBarPresentation.activeWorkspaces.rawValue, "allDisplays")
         settings.setPresentation(.iconOnly)
 
         let reopened = MenuBarAppearanceSettings(defaults: defaults)
