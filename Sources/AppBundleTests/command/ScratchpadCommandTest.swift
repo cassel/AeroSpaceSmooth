@@ -48,6 +48,31 @@ final class ScratchpadCommandTest: XCTestCase {
         assertTrue(result.stderr.first?.contains("scratchpad assign 7") == true)
     }
 
+    func testAssigningFocusedWindowPreservesUserWorkspace() async {
+        let workspace = focus.workspace
+        let captured = TestWindow.new(id: 8, parent: workspace.rootTilingContainer)
+        let remaining = TestWindow.new(id: 9, parent: workspace.rootTilingContainer)
+        assertTrue(captured.focusWindow())
+
+        let result = await parseCommand("scratchpad assign 1").cmdOrDie.run(.defaultEnv, .emptyStdin)
+
+        assertEquals(result.exitCode.rawValue, 0)
+        assertEquals(captured.nodeWorkspace?.name, "_smooth-scratchpad-1")
+        assertEquals(focus.workspace, workspace)
+        assertEquals(mainMonitorInfo.activeWorkspace, workspace)
+        assertEquals(focus.windowOrNil, remaining)
+        assertFalse(Workspace.get(byName: "_smooth-scratchpad-1").isVisible)
+    }
+
+    func testScratchpadWorkspaceIsNeverSelectedAsMonitorStub() {
+        let scratchpad = Workspace.get(byName: "_smooth-scratchpad-4")
+        TestWindow.new(id: 10, parent: scratchpad.floatingWindowsContainer)
+
+        let stub = getStubWorkspace(for: mainMonitorInfo)
+
+        assertTrue(stub.isUserFacing)
+    }
+
     func testRemovingHiddenWindowReturnsItToCurrentWorkspace() async {
         let workspace = focus.workspace
         let window = TestWindow.new(id: 11, parent: workspace.rootTilingContainer)
@@ -59,6 +84,36 @@ final class ScratchpadCommandTest: XCTestCase {
         assertEquals(window.nodeWorkspace, workspace)
         assertTrue(window.isFloating)
         assertTrue(ScratchpadManager.shared.items(in: 3).isEmpty)
+    }
+
+    func testRemovingWindowEscapesLeakedInternalWorkspace() async {
+        let userWorkspace = focus.workspace
+        let window = TestWindow.new(id: 12, parent: userWorkspace.rootTilingContainer)
+        _ = await parseCommand("scratchpad --window-id 12 assign 5").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        let backingWorkspace = Workspace.get(byName: "_smooth-scratchpad-5")
+        assertTrue(backingWorkspace.focusWorkspace())
+
+        ScratchpadManager.shared.remove(windowId: 12, from: 5)
+
+        XCTAssertNil(window.scratchpadSlot)
+        assertEquals(window.nodeWorkspace, userWorkspace)
+        assertEquals(focus.workspace, userWorkspace)
+        assertEquals(mainMonitorInfo.activeWorkspace, userWorkspace)
+    }
+
+    func testRefreshRecoversOrphanedWindowFromVisibleInternalWorkspace() {
+        let userWorkspace = focus.workspace
+        let backingWorkspace = Workspace.get(byName: "_smooth-scratchpad-6")
+        let orphanedWindow = TestWindow.new(id: 13, parent: backingWorkspace.floatingWindowsContainer)
+        assertTrue(backingWorkspace.focusWorkspace())
+
+        ScratchpadManager.shared.synchronizeAfterModelRefresh()
+
+        XCTAssertNil(orphanedWindow.scratchpadSlot)
+        assertEquals(orphanedWindow.nodeWorkspace, userWorkspace)
+        assertEquals(focus.workspace, userWorkspace)
+        assertEquals(mainMonitorInfo.activeWorkspace, userWorkspace)
+        assertFalse(backingWorkspace.isVisible)
     }
 
     func testCaptureCanBeArmedAndCancelled() {

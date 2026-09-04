@@ -99,10 +99,10 @@ private func reconcileSmoothWorkspaceLayouts(constraintFallbackWorkspaces: Set<S
 
     enforceSmoothMonitorTileLimits()
 
-    let existingWorkspaceNames = Workspace.all.map(\.name).toSet()
+    let existingWorkspaceNames = Workspace.all.filter(\.isUserFacing).map(\.name).toSet()
     smoothWorkspaceLayoutSnapshots = smoothWorkspaceLayoutSnapshots.filter { existingWorkspaceNames.contains($0.key) }
 
-    for workspace in Workspace.all {
+    for workspace in Workspace.all where workspace.isUserFacing {
         let root = workspace.rootTilingContainer
         let currentWindows = root.allLeafWindowsRecursive
         guard !currentWindows.isEmpty else {
@@ -241,7 +241,7 @@ private func enforceSmoothMonitorTileLimits() {
     let persistentOrder = Dictionary(
         uniqueKeysWithValues: config.persistentWorkspaces.enumerated().map { ($0.element, $0.offset) },
     )
-    let groupedWorkspaces = Dictionary(grouping: Workspace.all) { $0.workspaceMonitor.name }
+    let groupedWorkspaces = Dictionary(grouping: Workspace.all.filter(\.isUserFacing)) { $0.workspaceMonitor.name }
 
     for (_, unsortedWorkspaces) in groupedWorkspaces {
         let workspaces = unsortedWorkspaces.sorted {

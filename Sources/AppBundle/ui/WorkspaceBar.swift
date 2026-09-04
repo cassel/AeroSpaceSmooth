@@ -74,7 +74,7 @@ final class WorkspaceBarController {
             guard let screen = NSScreen.screens.getOrNil(atIndex: monitor.monitorAppKitNsScreenScreensId - 1) else { continue }
             let workspaces = Workspace.all
                 .filter { workspace in
-                    !workspace.name.hasPrefix("_smooth-") &&
+                    workspace.isUserFacing &&
                         workspace.workspaceMonitor.stableIdentifier == monitor.stableIdentifier &&
                         (settings.showsEmptyWorkspaces || workspace.isVisible || !workspace.isEffectivelyEmpty)
                 }

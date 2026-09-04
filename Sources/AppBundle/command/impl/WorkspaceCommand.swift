@@ -76,10 +76,12 @@ private func focusWorkspace(_ workspace: Workspace, on monitor: MonitorInfo, fai
         let currentMonitor = current.workspaceMonitor
         let workspaces: [Workspace] = stdin != nil
             ? stdinWorkspaces.map { Workspace.get(byName: $0.raw) }
-            : Workspace.all.filter { $0.workspaceMonitor.rect.topLeftCorner == currentMonitor.rect.topLeftCorner }
-                .toSet()
-                .union([current])
-                .sorted()
+            : Workspace.all.filter {
+                $0.isUserFacing && $0.workspaceMonitor.rect.topLeftCorner == currentMonitor.rect.topLeftCorner
+            }
+            .toSet()
+            .union([current])
+            .sorted()
         if workspaces.isEmpty { throw "The list of workspaces is empty" }
         let index = workspaces.firstIndex(where: { $0 == target.workspace })
             .map { index in isNext ? index + 1 : index - 1 }

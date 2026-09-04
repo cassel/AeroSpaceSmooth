@@ -90,7 +90,7 @@ private final class WorkspaceNavigatorModel: ObservableObject {
             for monitor in sortedMonitorInfos {
                 let workspaces = Workspace.all
                     .filter {
-                        !$0.name.hasPrefix("_smooth-") &&
+                        $0.isUserFacing &&
                             $0.workspaceMonitor.stableIdentifier == monitor.stableIdentifier
                     }
                     .sorted()

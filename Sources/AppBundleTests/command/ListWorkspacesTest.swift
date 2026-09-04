@@ -31,6 +31,16 @@ final class ListWorkspacesTest: XCTestCase {
         assertEquals(result.stdout, ["a", "b", "setUpWorkspacesForTests"])
     }
 
+    func testRunAllHidesInternalWorkspaces() async {
+        let scratchpad = Workspace.get(byName: "_smooth-scratchpad-1")
+        TestWindow.new(id: 3, parent: scratchpad.floatingWindowsContainer)
+
+        let result = await parseCommand("list-workspaces --all").cmdOrDie.run(.defaultEnv, .emptyStdin)
+
+        assertEquals(result.exitCode.rawValue, 0)
+        assertFalse(result.stdout.contains("_smooth-scratchpad-1"))
+    }
+
     func testRunVisible() async {
         TestWindow.new(id: 1, parent: Workspace.get(byName: "a").rootTilingContainer)
         let result = await parseCommand("list-workspaces --monitor all --visible").cmdOrDie.run(.defaultEnv, .emptyStdin)

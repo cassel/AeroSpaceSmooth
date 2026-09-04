@@ -78,7 +78,7 @@ final class PersistentManualLayoutStore: ObservableObject {
         guard isEnabled else { return }
         var updated = layouts
 
-        for workspace in Workspace.all where !workspace.name.hasPrefix("_smooth-") {
+        for workspace in Workspace.all where workspace.isUserFacing {
             let monitor = workspace.workspaceMonitor
             let automaticLayoutEnabled = SmoothLayoutSettingsStore.shared.profile(for: monitor).enabled
             let windows = workspace.rootTilingContainer.allLeafWindowsRecursive
@@ -105,7 +105,7 @@ final class PersistentManualLayoutStore: ObservableObject {
     func restore() async {
         guard isEnabled else { return }
 
-        for workspace in Workspace.all where !workspace.name.hasPrefix("_smooth-") {
+        for workspace in Workspace.all where workspace.isUserFacing {
             guard let saved = layouts[workspace.name] else { continue }
             let monitor = workspace.workspaceMonitor
             guard saved.workspaceName == workspace.name,

@@ -15,12 +15,15 @@ import Common
 @MainActor
 private func getStubWorkspace(forPoint point: CGPoint) -> Workspace {
     if let prev = screenPointToPrevVisibleWorkspace[point].map({ Workspace.get(byName: $0) }),
-       !prev.isVisible && prev.workspaceMonitor.rect.topLeftCorner == point && prev.forceAssignedMonitor == nil
+       prev.isUserFacing &&
+       !prev.isVisible &&
+       prev.workspaceMonitor.rect.topLeftCorner == point &&
+       prev.forceAssignedMonitor == nil
     {
         return prev
     }
     if let candidate = Workspace.all
-        .first(where: { !$0.isVisible && $0.workspaceMonitor.rect.topLeftCorner == point })
+        .first(where: { $0.isUserFacing && !$0.isVisible && $0.workspaceMonitor.rect.topLeftCorner == point })
     {
         return candidate
     }
@@ -102,6 +105,8 @@ final class Workspace: TreeNode, NonLeafTreeNodeObject, Hashable, Comparable {
 }
 
 extension Workspace {
+    nonisolated var isUserFacing: Bool { !name.hasPrefix("_smooth-") }
+
     @MainActor
     var isVisible: Bool { visibleWorkspaceToScreenPoint.keys.contains(self) }
     @MainActor

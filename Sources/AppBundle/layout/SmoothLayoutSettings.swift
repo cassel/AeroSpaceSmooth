@@ -334,7 +334,7 @@ final class SmoothLayoutSettingsStore: ObservableObject {
         if !configuredName.isEmpty { return configuredName }
 
         let workspaces = Workspace.all
-            .filter { $0.workspaceMonitor.stableIdentifier == monitor.stableIdentifier && !$0.name.hasPrefix("_smooth-") }
+            .filter { $0.workspaceMonitor.stableIdentifier == monitor.stableIdentifier && $0.isUserFacing }
             .sorted()
         return workspaces.getOrNil(atIndex: slot - 1)?.name
     }

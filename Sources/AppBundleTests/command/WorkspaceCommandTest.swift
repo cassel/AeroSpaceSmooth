@@ -193,4 +193,21 @@ final class WorkspaceCommandTest: XCTestCase {
         assertEquals(result.exitCode.rawValue, 0)
         assertEquals(focus.workspace.name, "b")
     }
+
+    func testRelativeNavigationSkipsInternalWorkspaces() {
+        let scratchpad = Workspace.get(byName: "_smooth-scratchpad-1")
+        TestWindow.new(id: 30, parent: scratchpad.floatingWindowsContainer)
+        _ = Workspace.get(byName: "b")
+        assertTrue(Workspace.get(byName: "a").focusWorkspace())
+
+        let next = getNextPrevWorkspace(
+            current: focus.workspace,
+            isNext: true,
+            wrapAround: true,
+            stdin: nil,
+            target: focus,
+        ).getOrDie()
+
+        assertTrue(next.isUserFacing)
+    }
 }

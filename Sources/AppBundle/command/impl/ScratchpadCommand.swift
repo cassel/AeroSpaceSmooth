@@ -50,9 +50,11 @@ final class ScratchpadManager: ObservableObject {
 
     private func assign(_ window: Window, to slot: Int) {
         guard (1 ... smoothWorkspaceSlotCount).contains(slot) else { return }
+        let workspaceToKeepVisible = focus.workspace
         window.scratchpadSlot = slot
         window.isFullscreen = false
         window.bindAsFloatingWindow(to: Self.backingWorkspace(slot: slot))
+        _ = workspaceToKeepVisible.focusWorkspace()
         statusMessage = "\(window.app.name ?? "Window \(window.windowId)") was added to Slot \(slot) and hidden."
         refreshWindowItems(force: true)
     }
@@ -67,6 +69,7 @@ final class ScratchpadManager: ObservableObject {
         if isPresented {
             let backing = backingWorkspace(slot: slot)
             for window in windows { window.bindAsFloatingWindow(to: backing) }
+            _ = workspace.focusWorkspace()
             shared.statusMessage = "Slot \(slot) was hidden."
         } else {
             for window in windows { window.bindAsFloatingWindow(to: workspace) }
@@ -110,6 +113,7 @@ final class ScratchpadManager: ObservableObject {
     }
 
     func synchronizeAfterModelRefresh() {
+        restoreVisibleInternalWorkspaces()
         if let slot = armedSlot,
            captureIsAllowed,
            let window = focus.windowOrNil,
@@ -135,15 +139,20 @@ final class ScratchpadManager: ObservableObject {
 
     func remove(windowId: UInt32, from slot: Int) {
         guard let window = Window.get(byId: windowId), window.scratchpadSlot == slot else { return }
-        let wasHidden = window.nodeWorkspace == Self.backingWorkspace(slot: slot)
+        let sourceWorkspace = window.nodeWorkspace.orDie()
+        let wasHidden = !sourceWorkspace.isUserFacing
+        let destination = focus.workspace.isUserFacing
+            ? focus.workspace
+            : getStubWorkspace(for: sourceWorkspace.workspaceMonitor)
         window.scratchpadSlot = nil
         if wasHidden {
-            window.bindAsFloatingWindow(to: focus.workspace)
+            window.bindAsFloatingWindow(to: destination)
             _ = window.focusWindow()
         }
-        statusMessage = "\(window.app.name ?? "Window \(window.windowId)") was removed from Slot \(slot)."
+        statusMessage = wasHidden
+            ? "\(window.app.name ?? "Window \(window.windowId)") was removed from Slot \(slot) and returned to workspace \(destination.name)."
+            : "\(window.app.name ?? "Window \(window.windowId)") was removed from Slot \(slot)."
         refreshWindowItems(force: true)
-        if !isUnitTest { scheduleCancellableCompleteRefreshSession(.menuBarButton) }
     }
 
     func refreshWindowItems(force: Bool = false) {
@@ -205,5 +214,30 @@ final class ScratchpadManager: ObservableObject {
 
     private static func backingWorkspace(slot: Int) -> Workspace {
         Workspace.get(byName: "_smooth-scratchpad-\(slot)")
+    }
+
+    /// Repairs state produced by older builds where a private scratchpad workspace
+    /// could become visible. Unassigned windows are restored instead of stranded.
+    private func restoreVisibleInternalWorkspaces() {
+        for monitor in sortedMonitorInfos {
+            let internalWorkspace = monitor.activeWorkspace
+            guard !internalWorkspace.isUserFacing else { continue }
+
+            let destination = getStubWorkspace(for: monitor)
+            let orphanedWindows = internalWorkspace.allLeafWindowsRecursive.filter { $0.scratchpadSlot == nil }
+            for window in orphanedWindows {
+                window.bindAsFloatingWindow(to: destination)
+            }
+
+            if focus.workspace == internalWorkspace {
+                if let window = orphanedWindows.first {
+                    _ = window.focusWindow()
+                } else {
+                    _ = destination.focusWorkspace()
+                }
+            } else {
+                _ = monitor.setActiveWorkspace(destination)
+            }
+        }
     }
 }

@@ -606,7 +606,7 @@ private struct SmoothLayoutSettingsView: View {
 
             ForEach(items) { item in
                 ScratchpadWindowRow(item: item) {
-                    scratchpads.remove(windowId: item.id, from: slot)
+                    removeScratchpadWindow(item.id, from: slot)
                 }
             }
         }
@@ -625,6 +625,15 @@ private struct SmoothLayoutSettingsView: View {
                     return
                 }
                 _ = await command.run(.defaultEnv, .emptyStdin)
+            }
+        }
+    }
+
+    private func removeScratchpadWindow(_ windowId: UInt32, from slot: Int) {
+        guard let token: RunSessionGuard = .isServerEnabled else { return }
+        Task.startUnstructured { @MainActor in
+            try await runLightSession(.menuBarButton, token) {
+                scratchpads.remove(windowId: windowId, from: slot)
             }
         }
     }
@@ -674,11 +683,11 @@ private struct ScratchpadWindowRow: View {
             Text(item.isPresented ? "Visible" : "Hidden")
                 .font(.caption)
                 .foregroundStyle(item.isPresented ? .green : .secondary)
-            Button(role: .destructive, action: onRemove) {
-                Image(systemName: "trash")
+            Button(action: onRemove) {
+                Label("Remove", systemImage: "minus.circle")
             }
             .buttonStyle(.borderless)
-            .help("Remove this window from the scratchpad")
+            .help("Remove from this scratchpad and return hidden windows to the current workspace")
         }
         .padding(.leading, 64)
     }
