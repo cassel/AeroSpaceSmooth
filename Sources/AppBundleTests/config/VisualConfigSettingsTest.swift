@@ -165,6 +165,7 @@ final class VisualConfigSettingsTest: XCTestCase {
             titleContains: "Bob's [scratch] terminal",
             layout: .floating,
             workspace: "utilities",
+            scratchpadSlot: 4,
         )
         draft.windowRules.insert(VisualWindowRule(applicationRule: visualRule), at: 0)
 
@@ -178,6 +179,7 @@ final class VisualConfigSettingsTest: XCTestCase {
         assertEquals(decoded.windowRules.first?.commands, [
             "layout floating",
             "move-node-to-workspace -- 'utilities'",
+            "scratchpad assign 4",
         ])
     }
 }

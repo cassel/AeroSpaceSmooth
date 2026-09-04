@@ -58,6 +58,9 @@ struct VisualWindowRule: Identifiable, Equatable, Sendable {
         if !applicationRule.workspace.isEmpty {
             commands.append("move-node-to-workspace -- \(Self.shellQuote(applicationRule.workspace))")
         }
+        if let scratchpadSlot = applicationRule.scratchpadSlot {
+            commands.append("scratchpad assign \(scratchpadSlot)")
+        }
         self.init(
             id: id,
             condition: matchers.joined(separator: " && "),
@@ -97,6 +100,7 @@ struct VisualWindowRule: Identifiable, Equatable, Sendable {
 
         var layout: VisualApplicationWindowLayout?
         var workspace = ""
+        var scratchpadSlot: Int?
         for commandText in commands {
             guard let command = commandText.lexAndParseShell().getIgnoringErrorsOrNil(), case .cmd(let words) = command else { return nil }
             if words.count == 2, words[0] == "layout", let parsedLayout = VisualApplicationWindowLayout(rawValue: words[1]), layout == nil {
@@ -105,11 +109,19 @@ struct VisualWindowRule: Identifiable, Equatable, Sendable {
                 workspace = words[2]
             } else if words.count == 2, words[0] == "move-node-to-workspace", workspace.isEmpty {
                 workspace = words[1]
+            } else if words.count == 3,
+                      words[0] == "scratchpad",
+                      words[1] == "assign",
+                      let slot = Int(words[2]),
+                      (1 ... smoothWorkspaceSlotCount).contains(slot),
+                      scratchpadSlot == nil
+            {
+                scratchpadSlot = slot
             } else {
                 return nil
             }
         }
-        guard layout != nil || !workspace.isEmpty else { return nil }
+        guard layout != nil || !workspace.isEmpty || scratchpadSlot != nil else { return nil }
 
         let titleContains: String
         if let titlePattern {
@@ -123,6 +135,7 @@ struct VisualWindowRule: Identifiable, Equatable, Sendable {
             titleContains: titleContains,
             layout: layout,
             workspace: workspace,
+            scratchpadSlot: scratchpadSlot,
         )
     }
 
@@ -173,6 +186,7 @@ struct VisualApplicationRule: Equatable, Sendable {
     var titleContains: String
     var layout: VisualApplicationWindowLayout?
     var workspace: String
+    var scratchpadSlot: Int? = nil
 }
 
 struct VisualHotkeyBinding: Identifiable, Equatable, Sendable {

@@ -12,7 +12,7 @@ final class WorkspaceCommandTest: XCTestCase {
     func testParseWorkspaceCommand() {
         testParseCommandFail("workspace my mail", msg: "ERROR: Unknown argument 'mail'", exitCode: 2)
         testParseCommandFail("workspace 'my mail'", msg: "ERROR: Whitespace characters are forbidden in workspace names", exitCode: 2)
-        assertEquals(parseCommand("workspace").errorOrNil, "ERROR: Argument '(<workspace-name>|next|prev)' is mandatory")
+        assertEquals(parseCommand("workspace").errorOrNil, "ERROR: Argument '(<workspace-name>|next|prev|monitor <slot>)' is mandatory")
         testParseSingleCommandSucc("workspace next", WorkspaceCmdArgs(target: .relative(.next)))
         testParseSingleCommandSucc("workspace --auto-back-and-forth W", WorkspaceCmdArgs(target: .direct(.parse("W").getOrDie()), autoBackAndForth: true))
         assertEquals(parseCommand("workspace --wrap-around W").errorOrNil, "--wrapAround requires using (next|prev) argument")
@@ -21,12 +21,14 @@ final class WorkspaceCommandTest: XCTestCase {
         assertEquals(parseCommand("workspace --stdin foo").errorOrNil, "--stdin and --no-stdin require using (next|prev) argument")
         testParseSingleCommandSucc("workspace --stdin next", WorkspaceCmdArgs(target: .relative(.next)).copy(\.commonState.explicitStdinFlag, true))
         testParseSingleCommandSucc("workspace --no-stdin next", WorkspaceCmdArgs(target: .relative(.next)).copy(\.commonState.explicitStdinFlag, false))
+        testParseSingleCommandSucc("workspace monitor 4", WorkspaceCmdArgs(target: .monitorRelative(4)))
+        assertEquals(parseCommand("workspace monitor 0").errorOrNil, "ERROR: Can't parse monitor-relative workspace slot '0'. Possible values: 1...10")
     }
 
     func testParseDashDash() {
         testParseSingleCommandSucc("workspace -- foo", WorkspaceCmdArgs(target: .direct(.parse("foo").getOrDie())))
         assertEquals(parseCommand("workspace -- next").errorOrNil, "ERROR: 'next' is a reserved workspace name")
-        assertEquals(parseCommand("workspace --").errorOrNil, "ERROR: Argument \'(<workspace-name>|next|prev)\' is mandatory")
+        assertEquals(parseCommand("workspace --").errorOrNil, "ERROR: Argument \'(<workspace-name>|next|prev|monitor <slot>)\' is mandatory")
         testParseSingleCommandSucc(
             "workspace --auto-back-and-forth -- foo",
             WorkspaceCmdArgs(target: .direct(.parse("foo").getOrDie()), autoBackAndForth: true),
@@ -43,6 +45,25 @@ final class WorkspaceCommandTest: XCTestCase {
         assertEquals(result.stdout, [])
         assertEquals(result.stderr, [])
         assertEquals(focus.workspace.name, "b")
+    }
+
+    func testMonitorRelativeSlotFocusesConfiguredWorkspace() async {
+        var slots = Array(repeating: "", count: smoothWorkspaceSlotCount)
+        slots[1] = "monitor-two"
+        SmoothLayoutSettingsStore.shared.replaceProfilesForTests([
+            "test-monitor": SmoothMonitorLayoutProfile(
+                monitorIdentifier: "test-monitor",
+                monitorName: "Test Monitor",
+                enabled: false,
+                styles: Array(repeating: .dwindle, count: SmoothMonitorLayoutProfile.configuredWindowCount),
+                workspaceSlots: slots,
+            ),
+        ])
+
+        let result = await parseCommand("workspace monitor 2").cmdOrDie.run(.defaultEnv, .emptyStdin)
+
+        assertEquals(result.exitCode.rawValue, 0)
+        assertEquals(focus.workspace.name, "monitor-two")
     }
 
     func testDirect_alreadyFocused_succWithMessage() async {

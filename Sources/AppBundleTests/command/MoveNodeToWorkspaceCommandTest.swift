@@ -12,12 +12,13 @@ final class MoveNodeToWorkspaceCommandTest: XCTestCase {
         assertEquals(parseCommand("move-node-to-workspace --stdin foo").errorOrNil, "--stdin and --no-stdin require using (next|prev) argument")
         testParseSingleCommandSucc("move-node-to-workspace --stdin next", MoveNodeToWorkspaceCmdArgs(target: .relative(.next)).copy(\.commonState.explicitStdinFlag, true))
         testParseSingleCommandSucc("move-node-to-workspace --no-stdin next", MoveNodeToWorkspaceCmdArgs(target: .relative(.next)).copy(\.commonState.explicitStdinFlag, false))
+        testParseSingleCommandSucc("move-node-to-workspace monitor 3", MoveNodeToWorkspaceCmdArgs(target: .monitorRelative(3)))
     }
 
     func testParseDashDash() {
         testParseSingleCommandSucc("move-node-to-workspace -- foo", MoveNodeToWorkspaceCmdArgs(workspace: "foo"))
         assertEquals(parseCommand("move-node-to-workspace -- prev").errorOrNil, "ERROR: 'prev' is a reserved workspace name")
-        assertEquals(parseCommand("move-node-to-workspace --").errorOrNil, "ERROR: Argument \'(<workspace-name>|next|prev)\' is mandatory")
+        assertEquals(parseCommand("move-node-to-workspace --").errorOrNil, "ERROR: Argument \'(<workspace-name>|next|prev|monitor <slot>)\' is mandatory")
         testParseSingleCommandSucc(
             "move-node-to-workspace --focus-follows-window -- foo",
             MoveNodeToWorkspaceCmdArgs(workspace: "foo").copy(\.focusFollowsWindow, true),
@@ -33,6 +34,29 @@ final class MoveNodeToWorkspaceCommandTest: XCTestCase {
         await parseCommand("move-node-to-workspace b").cmdOrDie.run(.defaultEnv, .emptyStdin)
         XCTAssertTrue(workspaceA.isEffectivelyEmpty)
         assertEquals((Workspace.get(byName: "b").rootTilingContainer.children.singleOrNil() as? Window)?.windowId, 1)
+    }
+
+    func testMonitorRelativeSlotMovesWindowToConfiguredWorkspace() async {
+        let source = Workspace.get(byName: "source")
+        source.rootTilingContainer.apply {
+            _ = TestWindow.new(id: 1, parent: $0).focusWindow()
+        }
+        var slots = Array(repeating: "", count: smoothWorkspaceSlotCount)
+        slots[2] = "monitor-three"
+        SmoothLayoutSettingsStore.shared.replaceProfilesForTests([
+            "test-monitor": SmoothMonitorLayoutProfile(
+                monitorIdentifier: "test-monitor",
+                monitorName: "Test Monitor",
+                enabled: false,
+                styles: Array(repeating: .dwindle, count: SmoothMonitorLayoutProfile.configuredWindowCount),
+                workspaceSlots: slots,
+            ),
+        ])
+
+        let result = await parseCommand("move-node-to-workspace monitor 3").cmdOrDie.run(.defaultEnv, .emptyStdin)
+
+        assertEquals(result.exitCode.rawValue, 0)
+        assertEquals(Workspace.get(byName: "monitor-three").allLeafWindowsRecursive.map(\.windowId), [1])
     }
 
     func testEmptyWorkspaceSubject() async {

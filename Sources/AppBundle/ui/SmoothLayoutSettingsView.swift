@@ -1,4 +1,5 @@
 import AppKit
+import Common
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -111,6 +112,7 @@ private struct SmoothLayoutSettingsView: View {
     @StateObject private var configSettings = VisualConfigSettingsStore()
     @ObservedObject private var conflictMonitor = WindowManagerConflictMonitor.shared
     @State private var selection: SmoothSettingsSection = .layouts
+    @State private var scratchpadStatus = ""
 
     var body: some View {
         HSplitView {
@@ -250,6 +252,39 @@ private struct SmoothLayoutSettingsView: View {
                     placeholder: "Workspace name",
                     addTitle: "Add Workspace",
                 )
+            }
+
+            SettingsCard(
+                "Monitor-relative Workspace Slots",
+                systemImage: "rectangle.3.group.bubble.left",
+                help: "Map slots 1–10 independently on each monitor. Bind commands such as ‘workspace monitor 1’ or ‘move-node-to-workspace monitor 1’; the same shortcut then resolves through the currently focused monitor.",
+            ) {
+                MonitorRelativeWorkspaceEditor()
+            }
+
+            SettingsCard(
+                "Scratchpads",
+                systemImage: "macwindow.on.rectangle",
+                help: "Each of the ten slots can hold multiple floating windows. Assign the focused window, then toggle that slot over the current workspace. You can bind the same actions with ‘scratchpad assign N’ and ‘scratchpad toggle N’.",
+            ) {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(1 ... smoothWorkspaceSlotCount, id: \.self) { slot in
+                        HStack {
+                            Text("Slot \(slot)")
+                                .frame(width: 54, alignment: .leading)
+                            Text("\(ScratchpadManager.windowCount(slot: slot)) windows")
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Button("Assign Focused") { performScratchpad(.assign, slot: slot) }
+                            Button("Toggle") { performScratchpad(.toggle, slot: slot) }
+                        }
+                    }
+                    if !scratchpadStatus.isEmpty {
+                        Text(scratchpadStatus)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
 
             SettingsCard(
@@ -441,6 +476,26 @@ private struct SmoothLayoutSettingsView: View {
         .frame(height: 54)
     }
 
+    private func performScratchpad(_ action: ScratchpadAction, slot: Int) {
+        guard let token: RunSessionGuard = .isServerEnabled else {
+            scratchpadStatus = "Window management is disabled."
+            return
+        }
+        Task.startUnstructured { @MainActor in
+            try await runLightSession(.menuBarButton, token) {
+                let parsed = parseCommand(["scratchpad", action.rawValue, String(slot)])
+                guard let command = parsed.cmdOrNil else {
+                    scratchpadStatus = "Could not parse the scratchpad command."
+                    return
+                }
+                let result = await command.run(.defaultEnv, .emptyStdin)
+                scratchpadStatus = result.exitCode.rawValue == 0
+                    ? "Scratchpad \(slot): \(action.rawValue) complete."
+                    : result.stderr.joined(separator: " ")
+            }
+        }
+    }
+
     @ViewBuilder
     private var statusLabel: some View {
         switch configSettings.status {
@@ -460,6 +515,52 @@ private struct SmoothLayoutSettingsView: View {
                 Label(message, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
                     .lineLimit(2)
+        }
+    }
+}
+
+@MainActor
+private struct MonitorRelativeWorkspaceEditor: View {
+    @ObservedObject private var settings = SmoothLayoutSettingsStore.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            ForEach(sortedMonitorInfos, id: \.stableIdentifier) { monitor in
+                let profile = settings.profile(for: monitor).normalized
+                DisclosureGroup(monitor.name) {
+                    Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
+                        ForEach(1 ... smoothWorkspaceSlotCount, id: \.self) { slot in
+                            GridRow {
+                                Text("Slot \(slot)")
+                                    .frame(width: 54, alignment: .leading)
+                                TextField(
+                                    "Automatic",
+                                    text: Binding(
+                                        get: { settings.profile(for: monitor).normalized.workspaceSlots[slot - 1] },
+                                        set: {
+                                            settings.setWorkspaceName(
+                                                $0,
+                                                slot: slot,
+                                                monitorIdentifier: monitor.stableIdentifier,
+                                                monitorName: monitor.name,
+                                                isHorizontal: monitor.width >= monitor.height,
+                                            )
+                                        },
+                                    ),
+                                )
+                                .font(.system(.body, design: .monospaced))
+                            }
+                        }
+                    }
+                    .padding(.top, 8)
+                }
+                .padding(10)
+                .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 9))
+                .accessibilityValue("\(profile.workspaceSlots.count) workspace slots")
+            }
+            Text("Leave a slot empty to use the existing workspaces already associated with that monitor in natural sort order.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 }
@@ -753,6 +854,16 @@ private struct ApplicationRuleEditorRow: View {
                 GridRow {
                     Text("Workspace")
                     TextField("Keep current, or enter a workspace without spaces", text: $rule.workspace)
+                }
+                GridRow {
+                    Text("Scratchpad")
+                    Picker("Scratchpad", selection: $rule.scratchpadSlot) {
+                        Text("None").tag(nil as Int?)
+                        ForEach(1 ... smoothWorkspaceSlotCount, id: \.self) { slot in
+                            Text("Slot \(slot)").tag(Optional(slot))
+                        }
+                    }
+                    .labelsHidden()
                 }
             }
         }

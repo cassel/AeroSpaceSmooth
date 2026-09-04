@@ -21,6 +21,13 @@ struct WorkspaceCommand: Command {
                 )
                 guard let workspace = workspace.getOrNil(appendErrorTo: &io.stderr) else { return .fail }
                 workspaceName = workspace.name
+            case .monitorRelative(let slot):
+                let monitor = focusedWs.workspaceMonitor
+                guard let resolved = SmoothLayoutSettingsStore.shared.workspaceName(slot: slot, on: monitor) else {
+                    return .fail(io.err("Monitor workspace slot \(slot) is empty for '\(monitor.name)'. Configure it in Settings → Workspaces."))
+                }
+                let workspace = Workspace.get(byName: resolved)
+                return focusWorkspace(workspace, on: monitor, failIfNoop: args.failIfNoop, io: io)
             case .direct(let name):
                 workspaceName = name.raw
                 if args.autoBackAndForth && focusedWs.name == workspaceName {
@@ -37,6 +44,25 @@ struct WorkspaceCommand: Command {
             return .from(bool: Workspace.get(byName: workspaceName).focusWorkspace())
         }
     }
+}
+
+@MainActor
+private func focusWorkspace(_ workspace: Workspace, on monitor: MonitorInfo, failIfNoop: Bool, io: CmdIo) -> BinaryExitCode {
+    if monitor.activeWorkspace == workspace {
+        return failIfNoop
+            ? .fail
+            : .succ(io.err("Workspace '\(workspace.name)' is already focused on monitor '\(monitor.name)'"))
+    }
+
+    let previousMonitor = workspace.isVisible ? workspace.workspaceMonitor : nil
+    guard monitor.setActiveWorkspace(workspace) else {
+        return .fail(io.err("Workspace '\(workspace.name)' is assigned to a different monitor in the TOML configuration"))
+    }
+    if let previousMonitor, previousMonitor.stableIdentifier != monitor.stableIdentifier {
+        let replacement = getStubWorkspace(for: previousMonitor)
+        check(previousMonitor.setActiveWorkspace(replacement))
+    }
+    return .from(bool: workspace.focusWorkspace())
 }
 
 @MainActor func getNextPrevWorkspace(current: Workspace, isNext: Bool, wrapAround: Bool, stdin: String?, target: LiveFocus) -> ResOrStr<Workspace> {

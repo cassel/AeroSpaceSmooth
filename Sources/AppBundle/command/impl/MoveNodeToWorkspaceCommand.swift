@@ -21,6 +21,15 @@ struct MoveNodeToWorkspaceCommand: Command {
                 )
                 guard let ws = ws.getOrNil(appendErrorTo: &io.stderr) else { return .fail }
                 targetWorkspace = ws
+            case .monitorRelative(let slot):
+                let monitor = subjectWs?.workspaceMonitor ?? target.workspace.workspaceMonitor
+                guard let workspaceName = SmoothLayoutSettingsStore.shared.workspaceName(slot: slot, on: monitor) else {
+                    return .fail(io.err("Monitor workspace slot \(slot) is empty for '\(monitor.name)'. Configure it in Settings → Workspaces."))
+                }
+                targetWorkspace = Workspace.get(byName: workspaceName)
+                guard targetWorkspace.assign(to: monitor) else {
+                    return .fail(io.err("Workspace '\(workspaceName)' is assigned to a different monitor in the TOML configuration"))
+                }
             case .direct(let name):
                 targetWorkspace = Workspace.get(byName: name.raw)
         }

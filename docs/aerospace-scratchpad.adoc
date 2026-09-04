@@ -1,0 +1,42 @@
+= aerospace-scratchpad(1)
+include::util/man-attributes.adoc[]
+:manname: aerospace-scratchpad
+// tag::purpose[]
+:manpurpose: Assign and toggle floating scratchpad windows
+// end::purpose[]
+
+// =========================================================== Synopsis
+== Synopsis
+[verse]
+// tag::synopsis[]
+aerospace scratchpad [-h|--help] [--window-id <window-id>] assign <slot>
+aerospace scratchpad [-h|--help] toggle <slot>
+
+// end::synopsis[]
+
+// =========================================================== Description
+== Description
+
+// tag::body[]
+`assign` associates the focused or selected window with a slot and hides it in a floating scratchpad workspace.
+
+`toggle` shows every window in the slot as a floating window on the focused workspace, or hides the slot when it is already visible there. Slots accept multiple windows and can be shown on any workspace.
+
+// =========================================================== Options
+include::./util/conditional-options-header.adoc[]
+
+-h, --help:: Print help
+
+--window-id <window-id>::
+include::./util/window-id-flag-desc.adoc[]
+
+// =========================================================== Arguments
+include::./util/conditional-arguments-header.adoc[]
+
+(assign|toggle):: Assign a window to a slot, or toggle every window in that slot.
+<slot>:: Scratchpad slot from 1 through 10.
+
+// end::body[]
+
+// =========================================================== Footer
+include::util/man-footer.adoc[]

@@ -122,6 +122,8 @@ let move_node_to_workspace_help_generated = """
                                   (next|prev)
        OR: move-node-to-workspace [-h|--help] [--focus-follows-window] [--fail-if-noop]
                                   [--window-id <window-id>] [--] <workspace-name>
+       OR: move-node-to-workspace [-h|--help] [--focus-follows-window] [--fail-if-noop]
+                                  [--window-id <window-id>] monitor <slot>
     """
 let move_workspace_to_monitor_help_generated = """
     USAGE: move-workspace-to-monitor [-h|--help] [--workspace <workspace>] [--wrap-around] (left|down|up|right)
@@ -142,6 +144,10 @@ let resize_help_generated = """
 let run_callback_help_generated = """
     USAGE: run-callback [-h|--help] [--for-every-window|--window-id <window-id>] on-window-detected
        OR: run-callback [-h|--help] (on-focus-changed|on-focused-monitor-changed)
+    """
+let scratchpad_help_generated = """
+    USAGE: scratchpad [-h|--help] [--window-id <window-id>] assign <slot>
+       OR: scratchpad [-h|--help] toggle <slot>
     """
 let split_help_generated = """
     USAGE: split [-h|--help] [--window-id <window-id>] (horizontal|vertical|opposite)
@@ -181,4 +187,5 @@ let workspace_back_and_forth_help_generated = """
 let workspace_help_generated = """
     USAGE: workspace [-h|--help] [--auto-back-and-forth] [--fail-if-noop] [--] <workspace-name>
        OR: workspace [-h|--help] [--wrap-around] [--stdin|--no-stdin] (next|prev)
+       OR: workspace [-h|--help] [--fail-if-noop] monitor <slot>
     """

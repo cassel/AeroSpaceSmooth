@@ -1,4 +1,5 @@
 import Combine
+import Common
 import Foundation
 
 enum SmoothLayoutStyle: String, Codable, CaseIterable, Identifiable, Sendable {
@@ -52,6 +53,7 @@ struct SmoothMonitorLayoutProfile: Codable, Equatable, Identifiable, Sendable {
     var tileLimit: Int
     var styles: [SmoothLayoutStyle]
     var customLayouts: [String: SmoothCustomLayoutBlueprint]
+    var workspaceSlots: [String]
 
     var id: String { monitorIdentifier ?? "legacy-name:\(monitorName)" }
 
@@ -89,6 +91,11 @@ struct SmoothMonitorLayoutProfile: Codable, Equatable, Identifiable, Sendable {
         result.customLayouts = result.customLayouts.filter { key, layout in
             Int(key) == layout.windowCount && layout.isValid
         }
+        if result.workspaceSlots.count < smoothWorkspaceSlotCount {
+            result.workspaceSlots += Array(repeating: "", count: smoothWorkspaceSlotCount - result.workspaceSlots.count)
+        } else if result.workspaceSlots.count > smoothWorkspaceSlotCount {
+            result.workspaceSlots = Array(result.workspaceSlots.prefix(smoothWorkspaceSlotCount))
+        }
         return result
     }
 
@@ -106,6 +113,7 @@ struct SmoothMonitorLayoutProfile: Codable, Equatable, Identifiable, Sendable {
                 ? [.fullscreen, .columns] + Array(repeating: .dwindle, count: configuredWindowCount - 2)
                 : [.fullscreen, .rows] + Array(repeating: .verticalPairs, count: configuredWindowCount - 2),
             customLayouts: [:],
+            workspaceSlots: Array(repeating: "", count: smoothWorkspaceSlotCount),
         )
     }
 
@@ -116,6 +124,7 @@ struct SmoothMonitorLayoutProfile: Codable, Equatable, Identifiable, Sendable {
         tileLimit: Int = 6,
         styles: [SmoothLayoutStyle],
         customLayouts: [String: SmoothCustomLayoutBlueprint] = [:],
+        workspaceSlots: [String] = [],
     ) {
         self.monitorIdentifier = monitorIdentifier
         self.monitorName = monitorName
@@ -123,6 +132,7 @@ struct SmoothMonitorLayoutProfile: Codable, Equatable, Identifiable, Sendable {
         self.tileLimit = tileLimit
         self.styles = styles
         self.customLayouts = customLayouts
+        self.workspaceSlots = workspaceSlots
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -132,6 +142,7 @@ struct SmoothMonitorLayoutProfile: Codable, Equatable, Identifiable, Sendable {
         case tileLimit
         case styles
         case customLayouts
+        case workspaceSlots
     }
 
     init(from decoder: any Decoder) throws {
@@ -142,6 +153,7 @@ struct SmoothMonitorLayoutProfile: Codable, Equatable, Identifiable, Sendable {
         tileLimit = try values.decodeIfPresent(Int.self, forKey: .tileLimit) ?? 6
         styles = try values.decodeIfPresent([SmoothLayoutStyle].self, forKey: .styles) ?? []
         customLayouts = try values.decodeIfPresent([String: SmoothCustomLayoutBlueprint].self, forKey: .customLayouts) ?? [:]
+        workspaceSlots = try values.decodeIfPresent([String].self, forKey: .workspaceSlots) ?? []
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -152,6 +164,7 @@ struct SmoothMonitorLayoutProfile: Codable, Equatable, Identifiable, Sendable {
         try values.encode(tileLimit, forKey: .tileLimit)
         try values.encode(styles, forKey: .styles)
         try values.encode(customLayouts, forKey: .customLayouts)
+        try values.encode(workspaceSlots, forKey: .workspaceSlots)
     }
 }
 
@@ -285,12 +298,45 @@ final class SmoothLayoutSettingsStore: ObservableObject {
     }
 
     func resetProfile(monitorIdentifier: String, monitorName: String, isHorizontal: Bool) {
-        profiles[monitorIdentifier] = .defaultProfile(
+        let workspaceSlots = profile(
+            identifier: monitorIdentifier,
+            named: monitorName,
+            isHorizontal: isHorizontal,
+        ).normalized.workspaceSlots
+        var reset = SmoothMonitorLayoutProfile.defaultProfile(
             monitorIdentifier: monitorIdentifier,
             monitorName: monitorName,
             isHorizontal: isHorizontal,
         )
+        reset.workspaceSlots = workspaceSlots
+        profiles[monitorIdentifier] = reset
         didChangeLayoutSettings()
+    }
+
+    func setWorkspaceName(
+        _ workspaceName: String,
+        slot: Int,
+        monitorIdentifier: String,
+        monitorName: String,
+        isHorizontal: Bool,
+    ) {
+        guard (1 ... smoothWorkspaceSlotCount).contains(slot) else { return }
+        var profile = profile(identifier: monitorIdentifier, named: monitorName, isHorizontal: isHorizontal).normalized
+        profile.workspaceSlots[slot - 1] = workspaceName
+        profiles[monitorIdentifier] = profile
+        persist()
+        objectWillChange.send()
+    }
+
+    func workspaceName(slot: Int, on monitor: MonitorInfo) -> String? {
+        guard (1 ... smoothWorkspaceSlotCount).contains(slot) else { return nil }
+        let configuredName = profile(for: monitor).normalized.workspaceSlots[slot - 1]
+        if !configuredName.isEmpty { return configuredName }
+
+        let workspaces = Workspace.all
+            .filter { $0.workspaceMonitor.stableIdentifier == monitor.stableIdentifier && !$0.name.hasPrefix("_smooth-") }
+            .sorted()
+        return workspaces.getOrNil(atIndex: slot - 1)?.name
     }
 
     func monitorsDidChange(_ monitors: [MonitorInfo]) {

@@ -14,6 +14,8 @@ aerospace move-node-to-workspace [-h|--help] [--focus-follows-window] [--wrap-ar
                                  (next|prev)
 aerospace move-node-to-workspace [-h|--help] [--focus-follows-window] [--fail-if-noop]
                                  [--window-id <window-id>] [--] <workspace-name>
+aerospace move-node-to-workspace [-h|--help] [--focus-follows-window] [--fail-if-noop]
+                                 [--window-id <window-id>] monitor <slot>
 
 // end::synopsis[]
 
@@ -24,6 +26,8 @@ aerospace move-node-to-workspace [-h|--help] [--focus-follows-window] [--fail-if
 {manpurpose}
 
 `(next|prev)` is identical to `workspace (next|prev)`
+
+`monitor <slot>` resolves the destination through the focused window's monitor-relative workspace slots.
 
 // =========================================================== Options
 include::./util/conditional-options-header.adoc[]
@@ -52,6 +56,7 @@ include::./util/conditional-arguments-header.adoc[]
 
 (next|prev):: Move window to next or prev workspace
 <workspace-name>:: Specifies workspace name where to move window to
+<slot>:: Monitor-relative workspace slot from 1 through 10.
 
 // end::body[]
 

@@ -111,6 +111,18 @@ extension Workspace {
             ?? assignedMonitorPoint?.monitorApproximation
             ?? mainMonitorInfo
     }
+
+    @MainActor
+    func assign(to monitor: MonitorInfo) -> Bool {
+        if isVisible {
+            return workspaceMonitor.stableIdentifier == monitor.stableIdentifier
+        }
+        if let forceAssignedMonitor, forceAssignedMonitor.stableIdentifier != monitor.stableIdentifier {
+            return false
+        }
+        assignedMonitorPoint = monitor.rect.topLeftCorner
+        return true
+    }
 }
 
 extension MonitorInfo {

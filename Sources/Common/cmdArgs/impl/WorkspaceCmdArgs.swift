@@ -44,6 +44,7 @@ extension WorkspaceCmdArgs {
 
 public enum WorkspaceTarget: Equatable, Sendable {
     case relative(NextPrev)
+    case monitorRelative(Int)
     case direct(WorkspaceName)
 
     public var isRelatve: Bool {
@@ -56,17 +57,27 @@ public enum WorkspaceTarget: Equatable, Sendable {
     public func workspaceNameOrNil() -> WorkspaceName? {
         switch self {
             case .direct(let name): name
-            case .relative: nil
+            case .relative, .monitorRelative: nil
         }
     }
 }
 
-let workspaceTargetPlaceholder = "(<workspace-name>|next|prev)"
+let workspaceTargetPlaceholder = "(<workspace-name>|next|prev|monitor <slot>)"
 
 func parseWorkspaceTarget(i: PosArgParserInput) -> ParsedCliArgs<WorkspaceTarget> {
     switch (i.arg, i.sawDashDash) {
         case ("next", false): return .succ(.relative(.next), advanceBy: 1)
         case ("prev", false): return .succ(.relative(.prev), advanceBy: 1)
+        case ("monitor", false):
+            guard let rawSlot = i.getOrNil(relativeIndex: 1) else {
+                return .fail("'monitor' must be followed by a slot from 1 to 10", advanceBy: 1)
+            }
+            guard let slot = Int(rawSlot), (1 ... smoothWorkspaceSlotCount).contains(slot) else {
+                return .fail("Can't parse monitor-relative workspace slot '\(rawSlot)'. Possible values: 1...10", advanceBy: 2)
+            }
+            return .succ(.monitorRelative(slot), advanceBy: 2)
         default: return .init(WorkspaceName.parse(i.arg).map(WorkspaceTarget.direct), advanceBy: 1)
     }
 }
+
+public let smoothWorkspaceSlotCount = 10

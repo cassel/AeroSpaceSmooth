@@ -11,6 +11,7 @@ include::util/man-attributes.adoc[]
 // tag::synopsis[]
 aerospace workspace [-h|--help] [--auto-back-and-forth] [--fail-if-noop] [--] <workspace-name>
 aerospace workspace [-h|--help] [--wrap-around] [--stdin|--no-stdin] (next|prev)
+aerospace workspace [-h|--help] [--fail-if-noop] monitor <slot>
 
 // end::synopsis[]
 
@@ -28,6 +29,10 @@ Focuses next or previous workspace in *the list*.
 
 * If `--stdin` is specified, then *the list* is taken from stdin
 * Otherwise, *the list* is defined as all workspaces (even empty ones) on focused monitor in alphabetical order
+
+*3. monitor <slot> syntax*
+
+Focuses the workspace configured for slot 1 through 10 on the focused monitor. Configure independent slot mappings for every display in AeroSpaceSmooth Settings under Workspaces. An empty slot falls back to the existing workspaces associated with that monitor in natural sort order.
 
 // =========================================================== Options
 include::util/conditional-options-header.adoc[]
@@ -55,6 +60,7 @@ Incompatible with `--stdin`
 include::./util/conditional-arguments-header.adoc[]
 
 <workspace-name>:: Workspace name to focus.
+<slot>:: Monitor-relative workspace slot from 1 through 10.
 
 // =========================================================== Examples
 include::util/conditional-examples-header.adoc[]
