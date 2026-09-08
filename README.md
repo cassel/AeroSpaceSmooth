@@ -1,3 +1,10 @@
+> [!IMPORTANT]
+> **AeroSpaceSmooth is now TileSail.** Active development has moved to
+> [cassel/TileSail](https://github.com/cassel/TileSail), an independently maintained
+> project by C. Cassel. The new repository preserves the full Git history and
+> AeroSpace's MIT attribution. Use TileSail for new code, issues and releases.
+> This repository remains available as the historical migration reference.
+
 # AeroSpaceSmooth
 
 <img src="./resources/Assets.xcassets/AppIcon.appiconset/icon.png" width="40%" align="right">
